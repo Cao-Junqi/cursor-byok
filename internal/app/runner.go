@@ -106,6 +106,7 @@ func Run(resources EmbeddedResources) error {
 	})
 
 	windowService.SetApp(app)
+	updateManager = updater.NewManager(app)
 	windowService.SetUpdater(updateManager)
 
 	mainWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
