@@ -213,7 +213,7 @@ async function handleTestAllModelAdapters() {
 
 // ── 批量导入 ──────────────────────────────────────────────────────────────────
 const importModal = ref(false);
-const importForm = reactive({ type: "openai", baseURL: "", apiKey: "" });
+const importForm = reactive({ type: "openai", baseURL: "", apiKey: "", providerName: "" });
 const importFetching = ref(false);
 const importModels = ref([]);   // [{id, displayName}]
 const importSelected = ref(new Set());
@@ -292,7 +292,9 @@ async function handleBatchImport() {
         baseURL: importForm.baseURL.trim(),
         apiKey: importForm.apiKey.trim(),
         modelID: model.id,
-        displayName: model.displayName || model.id,
+        displayName: importForm.providerName.trim()
+          ? `${importForm.providerName.trim()} ${model.displayName || model.id}`
+          : (model.displayName || model.id),
         tooltipData: model.displayName || model.id,
       };
       const result = await saveModelAdapterAt(-1, adapter);
@@ -468,6 +470,16 @@ onBeforeUnmount(() => {
                 v-model="importForm.baseURL"
                 type="text"
                 placeholder="https://api.openai.com"
+                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+              />
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-[#8a8a8a]">供应商名称（可选，作为模型名前缀）</label>
+              <input
+                v-model="importForm.providerName"
+                type="text"
+                placeholder="如：硅基、DeepSeek、OpenRouter..."
                 class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
               />
             </div>

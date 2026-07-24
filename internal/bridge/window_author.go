@@ -2,12 +2,12 @@ package bridge
 
 import "github.com/pkg/browser"
 
-const footerAuthorHomeURL = "https://space.bilibili.com/311706663/upload/video"
+const footerAuthorHomeURL = "https://github.com/Cao-Junqi/cursor-byok"
 
 var footerAuthorInfo = FooterAuthorInfo{
-	ButtonText:        "作者 leookun",
-	DialogTitle:       "作者寄语",
-	DialogContent:     "本软件是纯免费软件，如果你被收费，那大概率就是被骗了。\n欢迎点击访问作者主页 https://space.bilibili.com/311706663/upload/video\n查看更多更新动态、使用分享和后续内容。",
+	ButtonText:        "作者 Cao-Junqi",
+	DialogTitle:       "关于",
+	DialogContent:     "本项目由 Cao-Junqi 维护，基于 leookun/cursor-byok 修复和改进。\n欢迎访问主页：https://github.com/Cao-Junqi/cursor-byok",
 	DialogConfirmText: "访问主页",
 	DialogCancelText:  "关闭",
 }
