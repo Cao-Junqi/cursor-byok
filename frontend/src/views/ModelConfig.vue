@@ -12,10 +12,12 @@ import {
   openModelEditorWindow,
   reloadUserConfig,
   runModelAdapterTest,
+  saveModelAdapterAt,
   startModelAdapterTest,
   toUserError,
 } from "@/state/appState";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { fetchModelList } from "@/services/clientApi";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 
 const BATCH_TEST_CONCURRENCY = 10;
 
@@ -209,6 +211,105 @@ async function handleTestAllModelAdapters() {
   }
 }
 
+// ── 批量导入 ──────────────────────────────────────────────────────────────────
+const importModal = ref(false);
+const importForm = reactive({ type: "openai", baseURL: "", apiKey: "" });
+const importFetching = ref(false);
+const importModels = ref([]);   // [{id, displayName}]
+const importSelected = ref(new Set());
+const importError = ref("");
+const importAdding = ref(false);
+
+const importAllSelected = computed(
+  () => importModels.value.length > 0 && importSelected.value.size === importModels.value.length,
+);
+
+function openImportModal() {
+  importModal.value = true;
+  importModels.value = [];
+  importSelected.value = new Set();
+  importError.value = "";
+  importFetching.value = false;
+  importAdding.value = false;
+}
+
+function closeImportModal() {
+  importModal.value = false;
+}
+
+async function handleFetchModels() {
+  importError.value = "";
+  importModels.value = [];
+  importSelected.value = new Set();
+  importFetching.value = true;
+  try {
+    const result = await fetchModelList({
+      type: importForm.type,
+      baseURL: importForm.baseURL.trim(),
+      apiKey: importForm.apiKey.trim(),
+    });
+    if (result.error) {
+      importError.value = result.error;
+    } else {
+      importModels.value = result.models || [];
+      // 默认全选
+      importSelected.value = new Set(importModels.value.map((m) => m.id));
+    }
+  } catch (err) {
+    importError.value = toUserError(err);
+  } finally {
+    importFetching.value = false;
+  }
+}
+
+function toggleImportModel(id) {
+  const next = new Set(importSelected.value);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  importSelected.value = next;
+}
+
+function toggleImportAll() {
+  if (importAllSelected.value) {
+    importSelected.value = new Set();
+  } else {
+    importSelected.value = new Set(importModels.value.map((m) => m.id));
+  }
+}
+
+async function handleBatchImport() {
+  const toAdd = importModels.value.filter((m) => importSelected.value.has(m.id));
+  if (toAdd.length === 0) return;
+  importAdding.value = true;
+  try {
+    for (const model of toAdd) {
+      const adapter = {
+        ...createEmptyModelAdapter(),
+        type: importForm.type,
+        baseURL: importForm.baseURL.trim(),
+        apiKey: importForm.apiKey.trim(),
+        modelID: model.id,
+        displayName: model.displayName || model.id,
+        tooltipData: model.displayName || model.id,
+      };
+      const result = await saveModelAdapterAt(-1, adapter);
+      if (!result.ok) {
+        await showModal({ title: "添加失败", content: result.error });
+        break;
+      }
+    }
+    closeImportModal();
+  } catch (err) {
+    await showModal({ title: "添加失败", content: toUserError(err) });
+  } finally {
+    importAdding.value = false;
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 onMounted(async () => {
   await reloadUserConfig({ modelAdaptersOnly: true }).catch(() => { });
 });
@@ -245,6 +346,7 @@ onBeforeUnmount(() => {
           >
             {{ batchButtonText }}
           </Button>
+          <Button variant="default" :disabled="appState.configSaving || batchTesting" @click="openImportModal">批量导入</Button>
           <Button variant="primary" :disabled="appState.configSaving || batchTesting" @click="openEditor()">新增模型</Button>
         </div>
       </div>
@@ -319,4 +421,128 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
+
+  <!-- 批量导入模态框 -->
+  <Teleport to="body">
+    <Transition name="modal-mask">
+      <div
+        v-if="importModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        @click.self="closeImportModal"
+      >
+        <div class="w-full max-w-md rounded-[10px] border border-[#333] bg-[#1e1e1e] flex flex-col max-h-[85vh]">
+          <!-- 头部 -->
+          <div class="flex items-center justify-between px-5 py-4 border-b border-[#2a2a2a] shrink-0">
+            <h2 class="text-base font-medium text-white">批量导入模型</h2>
+            <button
+              class="text-[#666] hover:text-white transition-colors"
+              @click="closeImportModal"
+            >
+              <span class="icon-[mdi--close] text-[18px]"></span>
+            </button>
+          </div>
+
+          <!-- 表单区 -->
+          <div class="px-5 py-4 flex flex-col gap-3 shrink-0">
+            <!-- 类型选项卡 -->
+            <div class="center-row gap-2">
+              <button
+                v-for="tab in typeTabs"
+                :key="tab.value"
+                type="button"
+                class="center-row gap-1.5 rounded-[6px] border px-3 py-1.5 text-sm transition-colors"
+                :class="importForm.type === tab.value
+                  ? 'border-[#1ca35a] bg-[#123322] text-white'
+                  : 'border-[#343434] bg-[#252525] text-[#a3a3a3] hover:border-[#4a4a4a] hover:text-[#e5e5e5]'"
+                @click="importForm.type = tab.value; importModels = []; importError = ''"
+              >
+                <span :class="[tab.icon, 'text-[14px]']"></span>
+                {{ tab.label }}
+              </button>
+            </div>
+
+            <!-- base URL（Anthropic 不需要，固定官方地址） -->
+            <div v-if="importForm.type === 'openai'" class="flex flex-col gap-1">
+              <label class="text-xs text-[#8a8a8a]">接口地址</label>
+              <input
+                v-model="importForm.baseURL"
+                type="text"
+                placeholder="https://api.openai.com"
+                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+              />
+            </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-[#8a8a8a]">访问密钥</label>
+              <input
+                v-model="importForm.apiKey"
+                type="password"
+                placeholder="sk-..."
+                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+              />
+            </div>
+
+            <Button
+              variant="default"
+              :disabled="importFetching || (!importForm.apiKey.trim())"
+              class="w-full justify-center"
+              @click="handleFetchModels"
+            >
+              <span v-if="importFetching" class="icon-[mdi--loading] animate-spin text-[16px]"></span>
+              <span v-else class="icon-[mdi--cloud-download-outline] text-[16px]"></span>
+              {{ importFetching ? "获取中..." : "获取模型列表" }}
+            </Button>
+
+            <div v-if="importError" class="rounded-[6px] border border-[#4b1d1d] bg-[#2a1313] px-3 py-2 text-xs text-[#fca5a5]">
+              {{ importError }}
+            </div>
+          </div>
+
+          <!-- 模型列表 -->
+          <div v-if="importModels.length > 0" class="flex flex-col min-h-0 flex-1 border-t border-[#2a2a2a]">
+            <div class="flex items-center justify-between px-5 py-2 shrink-0">
+              <span class="text-xs text-[#8a8a8a]">共 {{ importModels.length }} 个模型，已选 {{ importSelected.size }}</span>
+              <button
+                class="text-xs text-[#4ea76e] hover:text-[#6dbf89] transition-colors"
+                @click="toggleImportAll"
+              >
+                {{ importAllSelected ? "取消全选" : "全选" }}
+              </button>
+            </div>
+            <div class="overflow-y-auto px-5 pb-2 flex flex-col gap-1">
+              <label
+                v-for="model in importModels"
+                :key="model.id"
+                class="flex items-center gap-3 rounded-[6px] px-2 py-1.5 cursor-pointer hover:bg-[#252525] transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  :checked="importSelected.has(model.id)"
+                  class="accent-[#1ca35a] w-4 h-4 shrink-0"
+                  @change="toggleImportModel(model.id)"
+                />
+                <div class="min-w-0">
+                  <div class="text-sm text-white truncate">{{ model.displayName }}</div>
+                  <div v-if="model.displayName !== model.id" class="text-xs text-[#666] truncate">{{ model.id }}</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 底部操作 -->
+          <div v-if="importModels.length > 0" class="px-5 py-4 border-t border-[#2a2a2a] center-row justify-end gap-2 shrink-0">
+            <Button variant="default" :disabled="importAdding" @click="closeImportModal">取消</Button>
+            <Button
+              variant="primary"
+              :disabled="importAdding || importSelected.size === 0"
+              @click="handleBatchImport"
+            >
+              <span v-if="importAdding" class="icon-[mdi--loading] animate-spin text-[16px]"></span>
+              {{ importAdding ? "添加中..." : `添加选中 (${importSelected.size})` }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>

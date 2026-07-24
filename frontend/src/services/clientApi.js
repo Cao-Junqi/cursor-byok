@@ -4,6 +4,7 @@ import {
   SaveUserConfig,
   StartProxy,
   StopProxy,
+  FetchModelList,
 } from "@bindings/cursor/internal/bridge/proxyservice.js";
 import { GetHomeMetricsSummary } from "@bindings/cursor/internal/bridge/metricsservice.js";
 import {
@@ -64,6 +65,10 @@ export function getProxyState() {
 
 export function getHomeMetricsSummary() {
   return withApiLogging("GetHomeMetricsSummary", undefined, () => GetHomeMetricsSummary());
+}
+
+export function fetchModelList(payload) {
+  return withApiLogging("FetchModelList", payload, () => FetchModelList(payload));
 }
 
 export function startProxyService() {

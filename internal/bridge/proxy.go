@@ -45,6 +45,12 @@ type UsageRecordsData = client.UsageRecordsData
 // UsageRecordsResult 定义了当前模块中的 UsageRecordsResult 类型。
 type UsageRecordsResult = client.UsageRecordsResult
 
+// FetchModelListRequest 定义获取模型列表的请求参数。
+type FetchModelListRequest = client.FetchModelListRequest
+
+// FetchModelListResult 定义获取模型列表的结果。
+type FetchModelListResult = client.FetchModelListResult
+
 // ProxyService 定义了当前模块中的 ProxyService 类型。
 type ProxyService struct {
 	// core 表示当前声明中的 core。
@@ -101,7 +107,10 @@ func (s *ProxyService) GetModelAdapterTestResults() []ModelAdapterTestResult {
 	return s.core.GetModelAdapterTestResults()
 }
 
-// GetDeviceID 用于处理与 GetDeviceID 相关的逻辑。
+// FetchModelList 调用目标供应商的模型列表接口，返回可用模型列表。
+func (s *ProxyService) FetchModelList(req FetchModelListRequest) FetchModelListResult {
+	return client.FetchModelList(req)
+}
 func (s *ProxyService) GetDeviceID() (string, error) {
 	return s.core.GetDeviceID()
 }
