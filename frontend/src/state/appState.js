@@ -872,6 +872,11 @@ export const appState = reactive({
 });
 
 watchEffect(() => {
+  if (!canUseLocalStorage()) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
       APP_STATE_STORAGE_KEY,
       JSON.stringify({
         ...buildConfigPayload(),
