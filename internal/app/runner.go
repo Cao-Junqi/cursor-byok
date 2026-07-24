@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"cursor/internal/appdata"
 	serverconfig "cursor/internal/backend/server/config"
 	"cursor/internal/buildinfo"
 
