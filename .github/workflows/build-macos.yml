@@ -1,0 +1,56 @@
+name: Build macOS
+
+on:
+  push:
+    branches: ["fix/perf-leaks"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14  # Apple Silicon runner
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install protoc
+        run: brew install protobuf
+
+      - name: Install protoc-gen-go + protoc-gen-connect-go
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+
+      - name: Install Wails3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+
+      - name: Generate proto
+        run: task generate:proto
+
+      - name: Build macOS arm64 DMG
+        run: task build:darwin:arm64
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cursor-byok-macos-arm64
+          path: bin/macos-arm64.dmg
+          if-no-files-found: error
