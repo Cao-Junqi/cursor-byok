@@ -1,9 +1,7 @@
 <template>
   <MainLayout />
   <MessageProvider />
-  <AdModelProvider v-if="isMainWindow" />
   <Modal
-
     :visible="modalState.visible"
     :title="modalState.title"
     :content="modalState.content"
@@ -39,11 +37,9 @@
 </template>
 <script setup>
 import MainLayout from "@/layouts/MainLayout.vue";
-import AdModelProvider from "@/components/AdModelProvider.vue";
 import Modal from "@/components/ui/Modal.vue";
 import MessageProvider from "@/components/ui/MessageProvider.vue";
 import { modalState, resolveModal } from "@/composables/useModal";
-
 import InputModal from "@/components/ui/InputModal.vue";
 import { inputModalState, resolveInputModal } from "@/composables/useInputModal";
 import { appState, confirmUpdatePrompt, dismissUpdatePrompt, updateViewState } from "@/state/appState";

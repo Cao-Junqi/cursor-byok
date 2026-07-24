@@ -1,4 +1,4 @@
-import { computed, reactive, watchSyncEffect } from "vue";
+import { computed, reactive, watchEffect } from "vue";
 import { Events } from "@wailsio/runtime";
 import dayjs from "dayjs";
 import { getLocale } from "@/i18n/runtime";
@@ -46,7 +46,7 @@ const UPDATE_READY_EVENT = "update:ready";
 const UPDATE_ERROR_EVENT = "update:error";
 const MODEL_ADAPTER_TEST_UPDATED_EVENT = "model-adapter-test:updated";
 const SUPPORTED_MODEL_ADAPTER_TEST_STATUSES = new Set(["idle", "running", "success", "error"]);
-const HOME_METRICS_MIN_LOADING_MS = 600;
+const HOME_METRICS_MIN_LOADING_MS = 0; // was 600; removed artificial delay
 
 export const ROUTE_MODE_OPTIONS = [
   { label: "本地服务模式", value: "local" },
@@ -871,12 +871,7 @@ export const appState = reactive({
   updatePromptBusy: false,
 });
 
-watchSyncEffect(() => {
-  if (!canUseLocalStorage()) {
-    return;
-  }
-  try {
-    window.localStorage.setItem(
+watchEffect(() => {
       APP_STATE_STORAGE_KEY,
       JSON.stringify({
         ...buildConfigPayload(),
@@ -905,7 +900,7 @@ watchSyncEffect(() => {
   }
 });
 
-watchSyncEffect((onCleanup) => {
+watchEffect((onCleanup) => {
   if (typeof window === "undefined") {
     return;
   }
@@ -915,7 +910,7 @@ watchSyncEffect((onCleanup) => {
   });
 });
 
-watchSyncEffect((onCleanup) => {
+watchEffect((onCleanup) => {
   if (typeof window === "undefined") {
     return;
   }
@@ -925,7 +920,7 @@ watchSyncEffect((onCleanup) => {
   });
 });
 
-watchSyncEffect((onCleanup) => {
+watchEffect((onCleanup) => {
   if (typeof window === "undefined") {
     return;
   }
@@ -935,7 +930,7 @@ watchSyncEffect((onCleanup) => {
   });
 });
 
-watchSyncEffect((onCleanup) => {
+watchEffect((onCleanup) => {
   if (typeof window === "undefined") {
     return;
   }
@@ -945,7 +940,7 @@ watchSyncEffect((onCleanup) => {
   });
 });
 
-watchSyncEffect((onCleanup) => {
+watchEffect((onCleanup) => {
   if (typeof window === "undefined") {
     return;
   }
@@ -955,7 +950,7 @@ watchSyncEffect((onCleanup) => {
   });
 });
 
-watchSyncEffect((onCleanup) => {
+watchEffect((onCleanup) => {
   if (typeof window === "undefined") {
     return;
   }
@@ -965,7 +960,7 @@ watchSyncEffect((onCleanup) => {
   });
 });
 
-watchSyncEffect((onCleanup) => {
+watchEffect((onCleanup) => {
   if (typeof window === "undefined") {
     return;
   }

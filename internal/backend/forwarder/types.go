@@ -114,6 +114,7 @@ type StreamEvent struct {
 
 type StreamSubscriber struct {
 	Signal chan struct{}
+	Cursor int // absolute backlog index of the next event this subscriber needs
 }
 
 type ActiveStream struct {
@@ -158,6 +159,7 @@ type ActiveStream struct {
 	PendingCompaction                           *PendingCompaction
 
 	Backlog                     []StreamEvent
+	BacklogOffset               int // number of events trimmed from the front of Backlog
 	Subscribers                 map[string]*StreamSubscriber
 	CheckpointConversation      *ConversationFile
 	PendingExecs                map[string]runtimecore.PendingExec

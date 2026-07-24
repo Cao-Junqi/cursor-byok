@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	appLogMaxLines        = 10000
-	appLogTrimReserveLine = 1000
+	appLogMaxLines        = 50000 // was 10000; raised to cut full-file read+write frequency 5×
+	appLogTrimReserveLine = 5000
 )
 
 var (

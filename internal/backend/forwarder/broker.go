@@ -331,20 +331,46 @@ func (broker *StreamBroker) Publish(requestID string, event StreamEvent) error {
 }
 
 // ReadFromCursor 返回从 cursor 开始尚未消费的 backlog 事件副本。
-func (broker *StreamBroker) ReadFromCursor(requestID string, cursor int) ([]StreamEvent, error) {
+// subscriberID 用于追踪消费进度以便 trim 已交付事件，释放内存。
+func (broker *StreamBroker) ReadFromCursor(requestID string, subscriberID string, cursor int) ([]StreamEvent, error) {
 	stream, ok := broker.Get(requestID)
 	if !ok || stream == nil {
 		return nil, fmt.Errorf("request is not active: %s", strings.TrimSpace(requestID))
 	}
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
-	if cursor < 0 {
-		cursor = 0
+
+	// 更新该订阅者的消费游标。
+	if sub, ok := stream.Subscribers[strings.TrimSpace(subscriberID)]; ok {
+		if cursor > sub.Cursor {
+			sub.Cursor = cursor
+		}
 	}
-	if cursor >= len(stream.Backlog) {
+
+	// 找出所有订阅者中最慢的游标，将其之前的事件全部 trim 掉。
+	if len(stream.Subscribers) > 0 {
+		minCursor := cursor
+		for _, sub := range stream.Subscribers {
+			if sub.Cursor < minCursor {
+				minCursor = sub.Cursor
+			}
+		}
+		trimCount := minCursor - stream.BacklogOffset
+		if trimCount > 0 {
+			stream.Backlog = stream.Backlog[trimCount:]
+			stream.BacklogOffset += trimCount
+		}
+	}
+
+	// 将绝对游标转换为 Backlog 内部偏移。
+	adjusted := cursor - stream.BacklogOffset
+	if adjusted < 0 {
+		adjusted = 0
+	}
+	if adjusted >= len(stream.Backlog) {
 		return nil, nil
 	}
-	return append([]StreamEvent(nil), stream.Backlog[cursor:]...), nil
+	return append([]StreamEvent(nil), stream.Backlog[adjusted:]...), nil
 }
 
 // Complete 把活动流标记为成功完成，并发布一个成功 endstream 事件。

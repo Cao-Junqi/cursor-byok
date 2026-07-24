@@ -272,7 +272,7 @@ func (host *Host) rebuildLocked(cfg serverconfig.Config) error {
 	legacyRunSSEProcedure := "/agent.v1.AgentService/RunSSE"
 	routeDeps := upstream.Dependencies{
 		SystemSettingService: &serverSystemSettings{configs: host.configs},
-		HTTPClient:           netproxy.NewHTTPClient(30000 * time.Second),
+		HTTPClient:           netproxy.NewHTTPClient(10 * time.Minute),
 	}
 
 	host.mux = server.New(

@@ -30,7 +30,7 @@
 			<true/>
 		</dict>
 		<key>NSHighResolutionCapable</key>
-		<string>true</string>
+		<true/>
 		<key>NSHumanReadableCopyright</key>
 		<string>© 2026, Cursor助手</string>
 	</dict>

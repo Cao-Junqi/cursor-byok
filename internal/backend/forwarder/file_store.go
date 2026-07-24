@@ -785,7 +785,10 @@ func writeJSONFileAtomic(path string, payload any) error {
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 	renamed = true
-	return syncDirectory(filepath.Dir(path))
+	// ponytail: skipping dir fsync here — the atomic rename is sufficient for crash safety
+	// on all target filesystems (macOS APFS/HFS+). Re-add if data loss is observed on ext4/XFS
+	// without journal barriers, or on NFS. See: https://lwn.net/Articles/457667/
+	return nil
 }
 
 func fileExists(path string) (bool, error) {

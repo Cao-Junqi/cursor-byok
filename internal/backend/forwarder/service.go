@@ -447,7 +447,7 @@ func (service *Service) RunSSE(ctx context.Context, req *connect.Request[aiserve
 	defer ticker.Stop()
 	cursor := 0
 	for {
-		backlog, err := service.broker.ReadFromCursor(requestID, cursor)
+		backlog, err := service.broker.ReadFromCursor(requestID, subscriberID, cursor)
 		if err != nil {
 			service.debug.LogRunSSE(ctx, requestID, "", "read_error", map[string]any{
 				"cursor": cursor,
@@ -491,7 +491,7 @@ func (service *Service) RunSSE(ctx context.Context, req *connect.Request[aiserve
 				"cursor": cursor,
 				"error":  ctx.Err().Error(),
 			})
-			if backlog, err := service.broker.ReadFromCursor(requestID, cursor); err == nil {
+			if backlog, err := service.broker.ReadFromCursor(requestID, subscriberID, cursor); err == nil {
 				for _, event := range backlog {
 					cursor++
 					if event.End {
@@ -509,7 +509,7 @@ func (service *Service) RunSSE(ctx context.Context, req *connect.Request[aiserve
 			continue
 		case <-ticker.C:
 		}
-		if backlog, err := service.broker.ReadFromCursor(requestID, cursor); err != nil {
+		if backlog, err := service.broker.ReadFromCursor(requestID, subscriberID, cursor); err != nil {
 			service.debug.LogRunSSE(ctx, requestID, "", "read_error", map[string]any{
 				"cursor": cursor,
 				"error":  err.Error(),
