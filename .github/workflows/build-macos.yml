@@ -43,7 +43,7 @@ jobs:
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 
       - name: Generate proto
-        run: task generate:proto
+        run: task common:generate:proto
 
       - name: Build macOS arm64 DMG
         run: task build:darwin:arm64

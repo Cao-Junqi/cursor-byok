@@ -28,7 +28,12 @@ func ensureAssistantHome() error {
 }
 
 func EnsureAssistantHome() error {
-	return ensureAssistantHome()
+	if err := ensureAssistantHome(); err != nil {
+		return err
+	}
+	// 后台清理旧 session，失败不阻塞启动。
+	go func() { _ = PruneOldHistory(defaultHistoryRetentionDays) }()
+	return nil
 }
 
 func migrateLegacyAssistantHome() {
