@@ -12,16 +12,15 @@ import {
   openModelConfigWindow,
   saveRoutingMode,
   syncHomeMetrics,
-  syncServiceState,
   toUserError,
   toggleService,
 } from "@/state/appState";
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted } from "vue";
+
+const METRICS_AUTO_REFRESH_MS = 30_000;
 
 const directModeEnabled = computed(() => appState.routingMode === "upstream");
 const message = useMessage();
-
-const { locale } = useLocale();
 
 async function showActionError(title, error) {
   await showModal({
@@ -34,16 +33,6 @@ async function handleToggleService() {
   const result = await toggleService();
   if (!result.ok) {
     await showActionError("服务操作失败", result.error);
-  }
-}
-
-async function handleRefreshState() {
-  const [serviceStateResult] = await Promise.allSettled([
-    syncServiceState(),
-    syncHomeMetrics(),
-  ]);
-  if (serviceStateResult.status === "rejected") {
-    await showActionError("刷新失败", toUserError(serviceStateResult.reason));
   }
 }
 
@@ -75,6 +64,21 @@ async function handleDirectModeChange(enabled) {
   }
   message.success(enabled ? "已切换到直连 Cursor 模式" : "已切换到本地服务模式");
 }
+
+let metricsTimer = null;
+
+onMounted(() => {
+  metricsTimer = setInterval(() => {
+    void syncHomeMetrics().catch(() => {});
+  }, METRICS_AUTO_REFRESH_MS);
+});
+
+onBeforeUnmount(() => {
+  if (metricsTimer !== null) {
+    clearInterval(metricsTimer);
+    metricsTimer = null;
+  }
+});
 </script>
 
 <template>
