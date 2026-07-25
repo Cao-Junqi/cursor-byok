@@ -434,7 +434,15 @@ func (adapter *OpenAIAdapter) Stream(ctx context.Context, req StreamRequest, sin
 		}
 	}
 	if modelchannel.OpenAIEndpointShape(endpoint) == "responses" {
-		return adapter.streamResponses(ctx, req, baseURL, apiKey, modelID, sink)
+		err := adapter.streamResponses(ctx, req, baseURL, apiKey, modelID, sink)
+		if err != nil && isHTTPStatusError(err, 404) {
+			// 供应商不支持 /v1/responses（404），自动降级到 /v1/chat/completions。
+			// 此时 sink 还未被调用（404在首字节前返回），重试是安全的。
+			fallbackReq := req
+			fallbackReq.OpenAIEndpoint = modelchannel.OpenAIEndpointChatCompletions
+			return adapter.streamChatCompletions(ctx, fallbackReq, baseURL, apiKey, modelID, sink)
+		}
+		return err
 	}
 	return adapter.streamChatCompletions(ctx, req, baseURL, apiKey, modelID, sink)
 }

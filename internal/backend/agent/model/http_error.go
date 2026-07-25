@@ -39,3 +39,11 @@ func buildHTTPStatusError(prefix string, resp *http.Response) error {
 	}
 	return fmt.Errorf("%s status=%d body=%s", strings.TrimSpace(prefix), resp.StatusCode, bodyText)
 }
+
+// isHTTPStatusError 判断 error 是否来自 buildHTTPStatusError 且状态码匹配。
+func isHTTPStatusError(err error, statusCode int) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), fmt.Sprintf("status=%d", statusCode))
+}
