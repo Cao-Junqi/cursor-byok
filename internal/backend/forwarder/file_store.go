@@ -40,10 +40,17 @@ type conversationProcessLock struct {
 	refs int
 }
 
+type cacheEntry struct {
+	conversation *ConversationFile
+	lastWritten  time.Time
+}
+
+const conversationCacheTTL = 2 * time.Hour
+
 type ConversationFileStore struct {
 	root    string
 	cacheMu sync.RWMutex
-	cache   map[string]*ConversationFile // guarded by cacheMu; eliminates disk reads on hot path
+	cache   map[string]*cacheEntry // guarded by cacheMu; memory-only session storage
 }
 
 type conversationContextFile struct {
@@ -56,10 +63,47 @@ type conversationContextFile struct {
 
 // NewConversationFileStore 创建 JSON history 文件存储。
 func NewConversationFileStore(historyRoot string) *ConversationFileStore {
-	return &ConversationFileStore{
+	store := &ConversationFileStore{
 		root:  strings.TrimSpace(historyRoot),
-		cache: make(map[string]*ConversationFile),
+		cache: make(map[string]*cacheEntry),
 	}
+	go store.runCacheEviction()
+	return store
+}
+
+// runCacheEviction 每5分钟清理超过 TTL 的 cache 条目，释放已结束会话占用的内存。
+func (store *ConversationFileStore) runCacheEviction() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		store.evictStaleCacheEntries()
+	}
+}
+
+func (store *ConversationFileStore) evictStaleCacheEntries() {
+	cutoff := time.Now().Add(-conversationCacheTTL)
+	store.cacheMu.Lock()
+	for id, entry := range store.cache {
+		if entry.lastWritten.Before(cutoff) {
+			delete(store.cache, id)
+		}
+	}
+	store.cacheMu.Unlock()
+}
+
+// EvictConversation 立即从缓存中移除指定会话，释放内存。
+// 在会话结束（stream 终止）后主动调用，避免等待 TTL 过期。
+func (store *ConversationFileStore) EvictConversation(conversationID string) {
+	if store == nil {
+		return
+	}
+	id := strings.TrimSpace(conversationID)
+	if id == "" {
+		return
+	}
+	store.cacheMu.Lock()
+	delete(store.cache, id)
+	store.cacheMu.Unlock()
 }
 
 // HistoryDir 返回 history 根路径。
@@ -252,9 +296,14 @@ func (store *ConversationFileStore) UpdateConversationMeta(conversationID string
 			return nil, err
 		}
 	}
-	if err := store.writeConversationMetaLocked(normalizedConversationID, conversation); err != nil {
-		return nil, err
+	// memory-only: update cache, skip disk write
+	deriveConversationLoopState(conversation)
+	store.cacheMu.Lock()
+	store.cache[normalizedConversationID] = &cacheEntry{
+		conversation: cloneConversationFile(conversation),
+		lastWritten:  time.Now(),
 	}
+	store.cacheMu.Unlock()
 	return cloneConversationFile(conversation), nil
 }
 
@@ -400,15 +449,15 @@ func (store *ConversationFileStore) mutateConversation(conversationID string, cr
 }
 
 func (store *ConversationFileStore) readConversationLocked(conversationID string) (*ConversationFile, error) {
-	// 热路径：先检查内存缓存，避免每次都读磁盘。
+	// 热路径：先检查内存缓存，零磁盘 I/O。
 	store.cacheMu.RLock()
-	if cached, ok := store.cache[conversationID]; ok {
+	if entry, ok := store.cache[conversationID]; ok {
 		store.cacheMu.RUnlock()
-		return cloneConversationFile(cached), nil
+		return cloneConversationFile(entry.conversation), nil
 	}
 	store.cacheMu.RUnlock()
 
-	// 缓存未命中：从磁盘加载。
+	// 缓存未命中：尝试从磁盘加载（进程重启后的冷恢复路径）。
 	stateBody, err := os.ReadFile(store.statePath(conversationID))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -449,15 +498,15 @@ func (store *ConversationFileStore) writeConversationLocked(conversationID strin
 		return fmt.Errorf("conversation is nil")
 	}
 	normalizeLoadedConversation(conversationID, conversation)
-	if err := store.writeContextLocked(conversationID, conversation); err != nil {
-		return err
-	}
-	if err := store.writeConversationMetaLocked(conversationID, conversation); err != nil {
-		return err
-	}
-	// 写入成功后更新内存缓存，后续读取直接命中缓存，不再走磁盘。
+	deriveConversationLoopState(conversation)
+	// ponytail: session history is memory-only; no disk writes for context.json / state.json.
+	// Token usage is tracked separately in UsageFileStore (usage.json) and is unaffected.
+	// Disk write removed to eliminate O(n×concurrency) JSON serialization under heavy load.
 	store.cacheMu.Lock()
-	store.cache[conversationID] = cloneConversationFile(conversation)
+	store.cache[conversationID] = &cacheEntry{
+		conversation: cloneConversationFile(conversation),
+		lastWritten:  time.Now(),
+	}
 	store.cacheMu.Unlock()
 	return nil
 }
