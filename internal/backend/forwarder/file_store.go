@@ -41,7 +41,9 @@ type conversationProcessLock struct {
 }
 
 type ConversationFileStore struct {
-	root string
+	root    string
+	cacheMu sync.RWMutex
+	cache   map[string]*ConversationFile // guarded by cacheMu; eliminates disk reads on hot path
 }
 
 type conversationContextFile struct {
@@ -54,7 +56,10 @@ type conversationContextFile struct {
 
 // NewConversationFileStore 创建 JSON history 文件存储。
 func NewConversationFileStore(historyRoot string) *ConversationFileStore {
-	return &ConversationFileStore{root: strings.TrimSpace(historyRoot)}
+	return &ConversationFileStore{
+		root:  strings.TrimSpace(historyRoot),
+		cache: make(map[string]*ConversationFile),
+	}
 }
 
 // HistoryDir 返回 history 根路径。
@@ -395,6 +400,15 @@ func (store *ConversationFileStore) mutateConversation(conversationID string, cr
 }
 
 func (store *ConversationFileStore) readConversationLocked(conversationID string) (*ConversationFile, error) {
+	// 热路径：先检查内存缓存，避免每次都读磁盘。
+	store.cacheMu.RLock()
+	if cached, ok := store.cache[conversationID]; ok {
+		store.cacheMu.RUnlock()
+		return cloneConversationFile(cached), nil
+	}
+	store.cacheMu.RUnlock()
+
+	// 缓存未命中：从磁盘加载。
 	stateBody, err := os.ReadFile(store.statePath(conversationID))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -438,7 +452,14 @@ func (store *ConversationFileStore) writeConversationLocked(conversationID strin
 	if err := store.writeContextLocked(conversationID, conversation); err != nil {
 		return err
 	}
-	return store.writeConversationMetaLocked(conversationID, conversation)
+	if err := store.writeConversationMetaLocked(conversationID, conversation); err != nil {
+		return err
+	}
+	// 写入成功后更新内存缓存，后续读取直接命中缓存，不再走磁盘。
+	store.cacheMu.Lock()
+	store.cache[conversationID] = cloneConversationFile(conversation)
+	store.cacheMu.Unlock()
+	return nil
 }
 
 func (store *ConversationFileStore) writeConversationMetaLocked(conversationID string, conversation *ConversationFile) error {
