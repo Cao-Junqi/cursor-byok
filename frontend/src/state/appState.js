@@ -1310,6 +1310,20 @@ export async function duplicateModelAdapterAt(index) {
   );
 }
 
+export async function updateProviderGroup(groupType, groupBaseURL, groupApiKey, updates) {
+  const currentConfig = await loadPersistedUserConfig();
+  const nextAdapters = normalizeModelAdapters(currentConfig.modelAdapters).map((adapter) => {
+    if (adapter.type !== groupType || adapter.baseURL !== groupBaseURL || adapter.apiKey !== groupApiKey) {
+      return adapter;
+    }
+    return { ...adapter, ...updates };
+  });
+  return persistConfigPayload(
+    { ...currentConfig, modelAdapters: nextAdapters },
+    { modelAdaptersOnly: true },
+  );
+}
+
 export async function syncServiceState() {
   const state = await getProxyState();
   applyProxyState(state);

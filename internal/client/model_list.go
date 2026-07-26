@@ -40,7 +40,7 @@ func FetchModelList(req FetchModelListRequest) FetchModelListResult {
 
 	switch strings.ToLower(strings.TrimSpace(req.Type)) {
 	case "anthropic":
-		return fetchAnthropicModels(ctx, strings.TrimSpace(req.APIKey))
+		return fetchAnthropicModels(ctx, strings.TrimSpace(req.BaseURL), strings.TrimSpace(req.APIKey))
 	default:
 		return fetchOpenAIModels(ctx, strings.TrimSpace(req.BaseURL), strings.TrimSpace(req.APIKey))
 	}
@@ -95,11 +95,16 @@ func fetchOpenAIModels(ctx context.Context, baseURL, apiKey string) FetchModelLi
 }
 
 // fetchAnthropicModels 调用 Anthropic GET /v1/models 接口。
-func fetchAnthropicModels(ctx context.Context, apiKey string) FetchModelListResult {
+// baseURL 为空时回退到官方地址，支持 Anthropic 协议中转站自定义地址。
+func fetchAnthropicModels(ctx context.Context, baseURL, apiKey string) FetchModelListResult {
 	if apiKey == "" {
 		return FetchModelListResult{Error: "访问密钥不能为空"}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.anthropic.com/v1/models", nil)
+	if baseURL == "" {
+		baseURL = "https://api.anthropic.com"
+	}
+	endpoint := strings.TrimRight(baseURL, "/") + "/v1/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return FetchModelListResult{Error: fmt.Sprintf("构建请求失败: %v", err)}
 	}

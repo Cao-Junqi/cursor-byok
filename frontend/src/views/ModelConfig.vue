@@ -15,6 +15,7 @@ import {
   saveModelAdapterAt,
   startModelAdapterTest,
   toUserError,
+  updateProviderGroup,
 } from "@/state/appState";
 import { fetchModelList } from "@/services/clientApi";
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
@@ -37,6 +38,38 @@ let batchStopRequested = false;
 const filteredAdapters = computed(() =>
   appState.modelAdapters.filter((adapter) => adapter.type === activeType.value),
 );
+
+function groupKeyOf(adapter) {
+  return `${adapter.type}::${adapter.baseURL}::${adapter.apiKey}`;
+}
+
+const groupedAdapters = computed(() => {
+  const groups = new Map();
+  filteredAdapters.value.forEach((adapter) => {
+    const key = groupKeyOf(adapter);
+    if (!groups.has(key)) {
+      groups.set(key, { key, type: adapter.type, baseURL: adapter.baseURL, apiKey: adapter.apiKey, adapters: [] });
+    }
+    groups.get(key).adapters.push(adapter);
+  });
+  return Array.from(groups.values());
+});
+
+// 分组默认展开，这里记录被手动折叠的分组 key。
+const collapsedGroups = ref(new Set());
+function isGroupExpanded(key) {
+  return !collapsedGroups.value.has(key);
+}
+function toggleGroup(key) {
+  const next = new Set(collapsedGroups.value);
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
+  }
+  collapsedGroups.value = next;
+}
+
 const batchButtonText = computed(() => {
   if (batchStopping.value) {
     return "停止中...";
@@ -211,12 +244,95 @@ async function handleTestAllModelAdapters() {
   }
 }
 
+// ── 供应商分组操作 ────────────────────────────────────────────────────────────
+const groupEditModal = ref(false);
+const groupEditTarget = reactive({ type: "openai", baseURL: "", apiKey: "" }); // 原始身份，用于定位分组
+const groupEditForm = reactive({ baseURL: "", apiKey: "" });
+const groupEditSaving = ref(false);
+const groupEditModelCount = ref(0);
+
+function openGroupEditModal(group) {
+  groupEditTarget.type = group.type;
+  groupEditTarget.baseURL = group.baseURL;
+  groupEditTarget.apiKey = group.apiKey;
+  groupEditForm.baseURL = group.baseURL;
+  groupEditForm.apiKey = group.apiKey;
+  groupEditModelCount.value = group.adapters.length;
+  groupEditModal.value = true;
+}
+
+function closeGroupEditModal() {
+  groupEditModal.value = false;
+}
+
+async function handleGroupEditSubmit() {
+  groupEditSaving.value = true;
+  try {
+    const result = await updateProviderGroup(groupEditTarget.type, groupEditTarget.baseURL, groupEditTarget.apiKey, {
+      baseURL: groupEditForm.baseURL.trim(),
+      apiKey: groupEditForm.apiKey.trim(),
+    });
+    if (!result.ok) {
+      await showActionError("保存失败", result.error);
+      return;
+    }
+    closeGroupEditModal();
+  } finally {
+    groupEditSaving.value = false;
+  }
+}
+
+const addModelModal = ref(false);
+const addModelTarget = reactive({ type: "openai", baseURL: "", apiKey: "" });
+const addModelForm = reactive({ modelID: "", displayName: "" });
+const addModelSaving = ref(false);
+
+function openAddModelModal(group) {
+  addModelTarget.type = group.type;
+  addModelTarget.baseURL = group.baseURL;
+  addModelTarget.apiKey = group.apiKey;
+  addModelForm.modelID = "";
+  addModelForm.displayName = "";
+  addModelModal.value = true;
+}
+
+function closeAddModelModal() {
+  addModelModal.value = false;
+}
+
+async function handleAddModelSubmit() {
+  const modelID = addModelForm.modelID.trim();
+  if (!modelID) return;
+  addModelSaving.value = true;
+  try {
+    const adapter = {
+      ...createEmptyModelAdapter(),
+      type: addModelTarget.type,
+      baseURL: addModelTarget.baseURL,
+      apiKey: addModelTarget.apiKey,
+      modelID,
+      displayName: addModelForm.displayName.trim() || modelID,
+    };
+    const result = await saveModelAdapterAt(-1, adapter);
+    if (!result.ok) {
+      await showActionError("添加失败", result.error);
+      return;
+    }
+    closeAddModelModal();
+  } finally {
+    addModelSaving.value = false;
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── 批量导入 ──────────────────────────────────────────────────────────────────
+const ANTHROPIC_OFFICIAL_BASE_URL = "https://api.anthropic.com";
 const importModal = ref(false);
 const importForm = reactive({ type: "openai", baseURL: "", apiKey: "", providerName: "" });
 const importFetching = ref(false);
 const importModels = ref([]);   // [{id, displayName}]
 const importSelected = ref(new Set());
+const importNames = reactive({}); // { [model.id]: 用户编辑后的展示名 }
 const importError = ref("");
 const importAdding = ref(false);
 
@@ -224,10 +340,29 @@ const importAllSelected = computed(
   () => importModels.value.length > 0 && importSelected.value.size === importModels.value.length,
 );
 
+function defaultImportName(model) {
+  const raw = model.displayName || model.id;
+  return importForm.providerName.trim() ? `${importForm.providerName.trim()} ${raw}` : raw;
+}
+
+function importNameFor(model) {
+  return importNames[model.id] ?? defaultImportName(model);
+}
+
+function setImportType(type) {
+  importForm.type = type;
+  importModels.value = [];
+  importError.value = "";
+  if (type === "anthropic" && !importForm.baseURL.trim()) {
+    importForm.baseURL = ANTHROPIC_OFFICIAL_BASE_URL;
+  }
+}
+
 function openImportModal() {
   importModal.value = true;
   importModels.value = [];
   importSelected.value = new Set();
+  for (const key of Object.keys(importNames)) delete importNames[key];
   importError.value = "";
   importFetching.value = false;
   importAdding.value = false;
@@ -241,6 +376,7 @@ async function handleFetchModels() {
   importError.value = "";
   importModels.value = [];
   importSelected.value = new Set();
+  for (const key of Object.keys(importNames)) delete importNames[key];
   importFetching.value = true;
   try {
     const result = await fetchModelList({
@@ -292,9 +428,7 @@ async function handleBatchImport() {
         baseURL: importForm.baseURL.trim(),
         apiKey: importForm.apiKey.trim(),
         modelID: model.id,
-        displayName: importForm.providerName.trim()
-          ? `${importForm.providerName.trim()} ${model.displayName || model.id}`
-          : (model.displayName || model.id),
+        displayName: importNameFor(model).trim() || defaultImportName(model),
         tooltipData: model.displayName || model.id,
       };
       const result = await saveModelAdapterAt(-1, adapter);
@@ -360,69 +494,170 @@ onBeforeUnmount(() => {
         当前还没有配置任何 {{ typeLabel(activeType) }} 模型。
       </div>
 
-      <div v-else class="h-full min-h-0 overflow-y-auto pr-1">
-        <div class="grid gap-3 pb-1 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
-          <Card
-            v-for="(adapter, index) in filteredAdapters"
-            :key="adapter.id || `${adapter.baseURL}-${adapter.modelID}-${index}`"
-          >
-            <div class="flex h-full min-h-[154px] flex-col justify-between gap-3">
-              <div class="flex flex-col gap-2.5">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 flex-1">
-                    <div class="truncate text-base font-medium text-white">{{ adapter.displayName }}</div>
-                    <div class="mt-1 truncate text-sm text-[#8f8f8f]">{{ adapter.modelID }}</div>
-                    <div v-if="adapter.type === 'openai'" class="mt-0.5 truncate text-xs text-[#737373]">
-                      {{ adapter.openAIEndpoint || "/v1/responses" }}
-                    </div>
-                  </div>
-                  <span
-                    class="center-row shrink-0 gap-1 rounded-[999px] border border-[#3f3f3f] px-[7px] py-[4px] text-[11px] font-medium text-[#cfcfcf]"
-                  >
-                    <span class="icon-[bxl--openai] text-[14px] !text-white" v-if="adapter.type === 'openai'"></span>
-                    <span class="icon-[logos--claude-icon] text-[14px]" v-else></span>
-                    <span>{{ typeLabel(adapter.type) }}</span>
-                  </span>
-                </div>
-
-                <div class="grid grid-cols-2 gap-2 text-sm text-[#a3a3a3]">
-                  <div class="rounded-[8px] bg-[#232323] px-3 py-2">
-                    <div class="text-[11px] uppercase tracking-[0.08em] text-[#666]">Host</div>
-                    <div class="mt-1 truncate text-[#d4d4d4]" :title="adapter.baseURL">{{ formatHost(adapter.baseURL) }}</div>
-                  </div>
-                  <div class="rounded-[8px] bg-[#232323] px-3 py-2">
-                    <div class="text-[11px] uppercase tracking-[0.08em] text-[#666]">API Key</div>
-                    <div class="mt-1 truncate text-[#d4d4d4]">{{ maskSecret(adapter.apiKey) }}</div>
-                  </div>
-                </div>
-
-                <ModelAdapterTestCard
-                  compact
-                  title="测试"
-                  empty-text="未测试"
-                  :result="getAdapterTestResult(adapter)"
-                />
-              </div>
-
-              <div class="center-row flex-wrap justify-end gap-2 border-t border-[#343434] pt-3">
-                <Button
-                  variant="default"
-                  :disabled="appState.configSaving || batchTesting || isAdapterTesting(adapter)"
-                  @click="handleTestModelAdapter(adapter)"
+      <div v-else class="h-full min-h-0 overflow-y-auto pr-1 flex flex-col gap-3 pb-1">
+        <Card v-for="group in groupedAdapters" :key="group.key">
+          <div class="flex flex-col gap-3">
+            <div class="flex items-start justify-between gap-3">
+              <button
+                type="button"
+                class="flex min-w-0 flex-1 items-start gap-2 text-left"
+                @click="toggleGroup(group.key)"
+              >
+                <span
+                  :class="[isGroupExpanded(group.key) ? 'icon-[mdi--chevron-down]' : 'icon-[mdi--chevron-right]', 'mt-1 shrink-0 text-[18px] text-[#8f8f8f]']"
+                ></span>
+                <span
+                  class="center-row shrink-0 gap-1 rounded-[999px] border border-[#3f3f3f] px-[7px] py-[4px] text-[11px] font-medium text-[#cfcfcf]"
                 >
-                  {{ isAdapterTesting(adapter) ? "测试中..." : "测试" }}
-                </Button>
-                <Button variant="default" :disabled="appState.configSaving" @click="openEditor(appState.modelAdapters.indexOf(adapter))">编辑</Button>
-                <Button variant="default" :disabled="appState.configSaving" @click="handleDuplicateModelAdapter(appState.modelAdapters.indexOf(adapter))">复制</Button>
-                <Button variant="text" :disabled="appState.configSaving"
-                  @click="handleDeleteModelAdapter(appState.modelAdapters.indexOf(adapter))">删除</Button>
+                  <span class="icon-[bxl--openai] text-[14px] !text-white" v-if="group.type === 'openai'"></span>
+                  <span class="icon-[logos--claude-icon] text-[14px]" v-else></span>
+                  <span>{{ typeLabel(group.type) }}</span>
+                </span>
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-base font-medium text-white" :title="group.baseURL">{{ formatHost(group.baseURL) }}</div>
+                  <div class="mt-0.5 truncate text-xs text-[#737373]">{{ maskSecret(group.apiKey) }} · {{ group.adapters.length }} 个模型</div>
+                </div>
+              </button>
+              <div class="center-row shrink-0 gap-2">
+                <Button variant="default" :disabled="appState.configSaving" @click="openAddModelModal(group)">添加模型</Button>
+                <Button variant="default" :disabled="appState.configSaving" @click="openGroupEditModal(group)">编辑供应商</Button>
               </div>
             </div>
-          </Card>
-        </div>
+
+            <div v-if="isGroupExpanded(group.key)" class="flex flex-col gap-2 border-t border-[#343434] pt-3">
+              <div
+                v-for="adapter in group.adapters"
+                :key="adapter.id || `${adapter.baseURL}-${adapter.modelID}`"
+                class="flex flex-col gap-2 rounded-[8px] bg-[#232323] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-sm font-medium text-white">{{ adapter.displayName }}</div>
+                  <div class="mt-0.5 truncate text-xs text-[#8f8f8f]">{{ adapter.modelID }}</div>
+                </div>
+                <div class="center-row shrink-0 flex-wrap gap-2">
+                  <ModelAdapterTestCard
+                    compact
+                    title="测试"
+                    empty-text="未测试"
+                    :result="getAdapterTestResult(adapter)"
+                  />
+                  <Button
+                    variant="default"
+                    :disabled="appState.configSaving || batchTesting || isAdapterTesting(adapter)"
+                    @click="handleTestModelAdapter(adapter)"
+                  >
+                    {{ isAdapterTesting(adapter) ? "测试中..." : "测试" }}
+                  </Button>
+                  <Button variant="default" :disabled="appState.configSaving" @click="openEditor(appState.modelAdapters.indexOf(adapter))">编辑</Button>
+                  <Button variant="default" :disabled="appState.configSaving" @click="handleDuplicateModelAdapter(appState.modelAdapters.indexOf(adapter))">复制</Button>
+                  <Button variant="text" :disabled="appState.configSaving"
+                    @click="handleDeleteModelAdapter(appState.modelAdapters.indexOf(adapter))">删除</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   </div>
+
+  <!-- 编辑供应商模态框 -->
+  <Teleport to="body">
+    <Transition name="modal-mask">
+      <div
+        v-if="groupEditModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        @click.self="closeGroupEditModal"
+      >
+        <div class="w-full max-w-sm rounded-[10px] border border-[#333] bg-[#1e1e1e] flex flex-col">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-[#2a2a2a]">
+            <h2 class="text-base font-medium text-white">编辑供应商</h2>
+            <button class="text-[#666] hover:text-white transition-colors" @click="closeGroupEditModal">
+              <span class="icon-[mdi--close] text-[18px]"></span>
+            </button>
+          </div>
+          <div class="px-5 py-4 flex flex-col gap-3">
+            <p class="text-xs text-[#8a8a8a]">修改将同步应用到该供应商下的全部 {{ groupEditModelCount }} 个模型。</p>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-[#8a8a8a]">接口地址</label>
+              <input
+                v-model="groupEditForm.baseURL"
+                type="text"
+                :placeholder="groupEditTarget.type === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com'"
+                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+              />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-[#8a8a8a]">访问密钥</label>
+              <input
+                v-model="groupEditForm.apiKey"
+                type="password"
+                placeholder="sk-..."
+                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+              />
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 px-5 py-4 border-t border-[#2a2a2a]">
+            <Button variant="default" :disabled="groupEditSaving" @click="closeGroupEditModal">取消</Button>
+            <Button
+              variant="primary"
+              :disabled="groupEditSaving || !groupEditForm.baseURL.trim() || !groupEditForm.apiKey.trim()"
+              @click="handleGroupEditSubmit"
+            >
+              {{ groupEditSaving ? "保存中..." : "保存" }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- 添加模型模态框 -->
+  <Teleport to="body">
+    <Transition name="modal-mask">
+      <div
+        v-if="addModelModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        @click.self="closeAddModelModal"
+      >
+        <div class="w-full max-w-sm rounded-[10px] border border-[#333] bg-[#1e1e1e] flex flex-col">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-[#2a2a2a]">
+            <h2 class="text-base font-medium text-white">添加模型</h2>
+            <button class="text-[#666] hover:text-white transition-colors" @click="closeAddModelModal">
+              <span class="icon-[mdi--close] text-[18px]"></span>
+            </button>
+          </div>
+          <div class="px-5 py-4 flex flex-col gap-3">
+            <p class="text-xs text-[#8a8a8a]">接入点与密钥继承自 {{ formatHost(addModelTarget.baseURL) }}。</p>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-[#8a8a8a]">模型 ID</label>
+              <input
+                v-model="addModelForm.modelID"
+                type="text"
+                placeholder="例如：gpt-4.1 / claude-sonnet-4-5"
+                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+              />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-[#8a8a8a]">展示名称（可选）</label>
+              <input
+                v-model="addModelForm.displayName"
+                type="text"
+                placeholder="留空则使用模型 ID"
+                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+              />
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 px-5 py-4 border-t border-[#2a2a2a]">
+            <Button variant="default" :disabled="addModelSaving" @click="closeAddModelModal">取消</Button>
+            <Button variant="primary" :disabled="addModelSaving || !addModelForm.modelID.trim()" @click="handleAddModelSubmit">
+              {{ addModelSaving ? "添加中..." : "添加" }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 
   <!-- 批量导入模态框 -->
   <Teleport to="body">
@@ -456,20 +691,20 @@ onBeforeUnmount(() => {
                 :class="importForm.type === tab.value
                   ? 'border-[#1ca35a] bg-[#123322] text-white'
                   : 'border-[#343434] bg-[#252525] text-[#a3a3a3] hover:border-[#4a4a4a] hover:text-[#e5e5e5]'"
-                @click="importForm.type = tab.value; importModels = []; importError = ''"
+                @click="setImportType(tab.value)"
               >
                 <span :class="[tab.icon, 'text-[14px]']"></span>
                 {{ tab.label }}
               </button>
             </div>
 
-            <!-- base URL（Anthropic 不需要，固定官方地址） -->
-            <div v-if="importForm.type === 'openai'" class="flex flex-col gap-1">
+            <!-- base URL -->
+            <div class="flex flex-col gap-1">
               <label class="text-xs text-[#8a8a8a]">接口地址</label>
               <input
                 v-model="importForm.baseURL"
                 type="text"
-                placeholder="https://api.openai.com"
+                :placeholder="importForm.type === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com'"
                 class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
               />
             </div>
@@ -533,8 +768,14 @@ onBeforeUnmount(() => {
                   class="accent-[#1ca35a] w-4 h-4 shrink-0"
                   @change="toggleImportModel(model.id)"
                 />
-                <div class="min-w-0">
-                  <div class="text-sm text-white truncate">{{ model.displayName }}</div>
+                <div class="min-w-0 flex-1 flex flex-col gap-0.5">
+                  <input
+                    :value="importNameFor(model)"
+                    type="text"
+                    class="w-full bg-transparent text-sm text-white truncate outline-none border-b border-transparent hover:border-[#3a3a3a] focus:border-[#555] transition-colors"
+                    @click.stop
+                    @input="importNames[model.id] = $event.target.value"
+                  />
                   <div v-if="model.displayName !== model.id" class="text-xs text-[#666] truncate">{{ model.id }}</div>
                 </div>
               </label>
