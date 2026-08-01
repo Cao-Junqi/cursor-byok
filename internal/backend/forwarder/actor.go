@@ -731,6 +731,17 @@ func (service *Service) handleProviderDoneEvent(stream *ActiveStream, payload *s
 	if err := service.flushAssistantText(stream, conversationID, turnSeq, requestID, accumulatedText, accumulatedReasoning, accumulatedReasoningSignature, accumulatedReasoningSignatureSource, accumulatedReasoningItemID, accumulatedReasoningStatus, accumulatedReasoningSummary, !hadToolInvocation); err != nil {
 		return service.failStreamIfNonTerminal(stream, "unknown", err)
 	}
+	// ponytail: finish_reason=length means the model hit its output token budget mid-generation.
+	// With heavy reasoning models (e.g. deepseek-v4 reasoningEffort=max), tool calls can be
+	// silently truncated, leaving the turn appearing to complete normally. Fail explicitly so
+	// the user sees an actionable error instead of a mysterious stop.
+	if strings.EqualFold(strings.TrimSpace(finishReason), "length") && !hadToolInvocation {
+		log.Printf("forwarder max_tokens_exceeded request_id=%s provider_pass=%d finish_reason=length had_tool_invocation=false; tool call likely truncated",
+			strings.TrimSpace(requestID), currentProviderPass(stream))
+		service.setTurnPhase(stream, TurnPhaseFailed)
+		return service.failStream(stream, "max_tokens_exceeded",
+			fmt.Errorf("provider pass %d output truncated by token limit (finish_reason=length); reduce reasoning effort or shorten context", currentProviderPass(stream)))
+	}
 	if err := service.recordTurnUsageSnapshot(stream, conversationID, turnSeq, requestID, modelCallID, "completed", usage, "", false); err != nil {
 		return service.failStreamIfNonTerminal(stream, "usage_persistence_error", err)
 	}

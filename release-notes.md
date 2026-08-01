@@ -1,6 +1,16 @@
 # Release Notes
 
-## [Unreleased] — fix/perf-leaks
+## [Unreleased] — fix/perf-leaks — v0.0.41
+
+### fix: `finish_reason=length` 静默中止（Fix 5）
+
+**症状**：使用 deepseek-v4 / 高 reasoningEffort 模型时，agent 在 20+ pass 后无任何 error 日志，直接停止。最后一条可见响应形如"现在运行测试"，但 tool call 未执行。
+
+**根因**：模型输出 token 耗尽（`finish_reason=length`），tool call 被截断丢弃。后端将 `length` 视为正常 `stop`，静默完成 turn，调用方看不到任何错误。
+
+**修复**：`actor.go` `handleProviderDoneEvent` — 检测 `finish_reason=length && !hadToolInvocation` 时，显式 `failStream("max_tokens_exceeded")` 并记录日志，用户在 Cursor 中将看到明确错误而非沉默停止。
+
+---
 
 ### fix: TLS 握手失败导致 agent 会话中断 (`4bf92f7`)
 
