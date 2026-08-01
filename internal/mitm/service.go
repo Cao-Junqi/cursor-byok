@@ -417,7 +417,7 @@ func (s *ProxyServer) newGoproxyHandler() *goproxy.ProxyHttpServer {
 		}
 	}
 	proxy.OnRequest().HandleConnect(goproxy.FuncHttpsHandler(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
-		if mitmAction == nil || !isWhitelistedRelayHost(host) {
+		if mitmAction == nil || !isWhitelistedRelayHost(host) || isTunnelOnlyHost(host) {
 			return goproxy.OkConnect, host
 		}
 		return mitmAction, host
@@ -652,6 +652,23 @@ func isWhitelistedRelayHost(host string) bool {
 		return true
 	}
 	if strings.HasSuffix(host, ".cursor.sh") {
+		return true
+	}
+	return false
+}
+
+// isTunnelOnlyHost returns true for Cursor hosts that use mTLS and must not be
+// MITM'd. The proxy lacks Cursor's client cert, so these hosts reject the
+// MITM TLS handshake with "unknown certificate". Transparent TCP tunnel only.
+// ponytail: static list; add entries if more cursor.sh hosts show the same error.
+func isTunnelOnlyHost(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = strings.ToLower(strings.TrimSpace(h))
+	} else {
+		host = strings.ToLower(strings.TrimSpace(host))
+	}
+	switch host {
+	case "api3.cursor.sh", "metrics.cursor.sh":
 		return true
 	}
 	return false
