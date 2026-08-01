@@ -1,6 +1,20 @@
 # Release Notes
 
-## [Unreleased] — fix/perf-leaks — v0.0.41
+## [Unreleased] — fix/perf-leaks — v0.0.43
+
+### fix: provider stream 自动重试（Fix 8）
+
+**症状**：使用 LongCat-2.0（reasoningEffort=xhigh）、deepseek-v4-pro（reasoningEffort=high）等重推理模型时，agent 在 pass 中途停止，app.log 无错误，session 无声消失。
+
+**根因**：上游 LLM 提供商（atmai.site / ark.cn / api.longcat.chat）在 streaming 连接空闲（重推理思考期间）或单请求时长达到上限时静默关闭 TCP 连接。proxy 层将错误静默吞掉，agent 看到的就是 session 突然中断。
+
+**修复**：`service.go` `runProviderStream` 增加透明重试机制：
+- 用 atomic counter 跟踪已投递给 actor 的事件数
+- 仅当 **零事件已投递** 且错误为 **可重试类型**（连接重置、超时、EOF、TLS 握手失败等）时自动重试
+- 指数退避：2s → 4s → 8s，最多 3 次重试
+- 已投递部分事件的失败不重试（避免重复执行工具），走原有 failStream 路径
+
+---
 
 ### fix: `finish_reason=length` 静默中止（Fix 5）
 

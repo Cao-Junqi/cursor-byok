@@ -1,6 +1,6 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-02（commit `74a0ca2`，branch `fix/perf-leaks`，v0.0.42）
+> 最后更新：2026-08-02（commit `待提交`，branch `fix/perf-leaks`，v0.0.43）
 
 ## 已完成的工作
 
@@ -50,6 +50,19 @@
 - **修复**：`internal/backend/forwarder/actor.go` `handleProviderDoneEvent`：检测 `finish_reason=length && !hadToolInvocation` 时显式 `failStream("max_tokens_exceeded")` 并打印日志，用户在 Cursor 中看到明确错误
 - **版本**：`0.0.40` → `0.0.41`
 - **状态**：已推送到 `fix/perf-leaks`
+
+### Fix 8：provider stream 透明自动重试（v0.0.43，待提交）
+
+- **问题**：使用 LongCat-2.0（xhigh reasoning）、deepseek-v4-pro（high reasoning）时，agent 在 pass 中途停止，app.log 无错误，session 无声消失
+- **根因**：上游 LLM 提供商在 streaming 空闲或单请求时长达到上限时静默关闭 TCP 连接。proxy 层将错误静默吞掉
+- **修复**：`internal/backend/forwarder/service.go` `runProviderStream` 增加透明重试机制：
+  - atomic counter 跟踪已投递给 actor 的事件数
+  - 仅当零事件已投递且错误为可重试类型（连接重置、超时、EOF、TLS 握手失败）时自动重试
+  - 指数退避 2s → 4s → 8s，最多 3 次
+  - 已投递部分事件的失败不重试（避免重复执行工具），走 failStream 路径
+- **状态**：代码已写好，待提交
+
+---
 
 ### Fix 6+7：stream 错误可见性 + 响应头超时（`74a0ca2`）
 

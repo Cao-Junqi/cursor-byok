@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
@@ -36,6 +38,12 @@ const (
 	// ponytail: hard ceiling to stop runaway tool loops; a legitimate multi-step
 	// agent rarely needs more than this. Raise if a valid use case hits the limit.
 	maxProviderPassesPerTurn = 50
+
+	// ponytail: auto-retry for transient stream failures (connection reset, upstream
+	// timeout). Only triggers when zero events were sent to the actor — partial
+	// failures can't be retried without duplicating tool calls.
+	maxProviderStreamRetries    = 3
+	providerStreamRetryBaseDelay = 2 * time.Second
 
 	runtimeThinkingEffortParameterID = "thinking_effort"
 )
@@ -1402,7 +1410,7 @@ func (service *Service) driveProvider(stream *ActiveStream) error {
 		"tool_count":             len(compiled.Tools),
 		"compile_summary_length": len(compiled.CompileSummary),
 	})
-	go service.runProviderStream(stream, currentToken, ctx, providerRequest)
+	go service.runProviderStream(stream, currentToken, ctx, providerRequest, 0)
 	return nil
 }
 
@@ -1575,8 +1583,10 @@ func (service *Service) persistDerivedPromptContexts(stream *ActiveStream, conve
 	return conversation, err
 }
 
-func (service *Service) runProviderStream(stream *ActiveStream, token uint64, ctx context.Context, request ProviderRequest) {
+func (service *Service) runProviderStream(stream *ActiveStream, token uint64, ctx context.Context, request ProviderRequest, retryCount int) {
+	var streamEventsSent int64
 	err := service.provider.StartStream(ctx, request, func(event modeladapter.ModelEvent) error {
+		atomic.AddInt64(&streamEventsSent, 1)
 		return service.postStreamCommandWait(stream, streamCommand{
 			Kind: streamCommandProviderEvent,
 			Provider: &streamProviderEvent{
@@ -1585,6 +1595,24 @@ func (service *Service) runProviderStream(stream *ActiveStream, token uint64, ct
 			},
 		})
 	})
+	// ponytail: transparent retry for clean failures. If no events reached the actor
+	// and the error is transient (network/connection), re-run the same pass. The
+	// agent never sees this — it looks like a slightly slower provider.
+	if err != nil && atomic.LoadInt64(&streamEventsSent) == 0 && retryCount < maxProviderStreamRetries && isRetryableStreamError(err) {
+		delay := providerStreamRetryBaseDelay * time.Duration(1<<uint(retryCount))
+		log.Printf("forwarder stream retry request_id=%s model_call_id=%s retry=%d/%d delay=%s err=%v",
+			strings.TrimSpace(request.RequestID),
+			strings.TrimSpace(request.ModelCallID),
+			retryCount+1,
+			maxProviderStreamRetries,
+			delay,
+			err,
+		)
+		time.AfterFunc(delay, func() {
+			service.runProviderStream(stream, token, ctx, request, retryCount+1)
+		})
+		return
+	}
 	if postErr := service.postStreamCommandWait(stream, streamCommand{
 		Kind: streamCommandProviderEvent,
 		Provider: &streamProviderEvent{
@@ -1619,6 +1647,43 @@ func (service *Service) runProviderStream(stream *ActiveStream, token uint64, ct
 		"model_call_id":  strings.TrimSpace(request.ModelCallID),
 		"provider_token": token,
 	})
+}
+
+// isRetryableStreamError classifies stream errors as safe for transparent retry.
+// Only network/connection-layer errors qualify — content errors (length, rate limit)
+// need agent visibility and must not silently restart.
+func isRetryableStreamError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	errText := strings.ToLower(err.Error())
+	retryable := []string{
+		"connection reset",
+		"broken pipe",
+		"eof",
+		"connection refused",
+		"no such host",
+		"tls: handshake failure",
+		"remote error: tls",
+		"i/o timeout",
+		"network is unreachable",
+		"bad record mac",
+		"reset by peer",
+		"transport endpoint is not connected",
+	}
+	for _, marker := range retryable {
+		if strings.Contains(errText, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // handleToolInvocation 把模型产生的工具意图转成 exec/interaction 请求并下发给客户端。
