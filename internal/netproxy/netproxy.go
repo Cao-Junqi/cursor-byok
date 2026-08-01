@@ -323,6 +323,11 @@ func cloneDefaultTransport() *http.Transport {
 		clone.Proxy = nil
 		return clone
 	}
+	// ponytail: ResponseHeaderTimeout bounds how long we wait for the first response
+	// header on a streaming connection. Without it, an upstream LLM provider that
+	// silently drops the TCP connection (common with heavy-reasoning models during
+	// long silent thinking phases) leaves the client hanging until the OS TCP
+	// keepalive kicks in (often 15+ min). 60s is generous enough for any cold-start.
 	return &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		ForceAttemptHTTP2:     true,
@@ -330,6 +335,7 @@ func cloneDefaultTransport() *http.Transport {
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: 60 * time.Second,
 	}
 }
 

@@ -2259,6 +2259,10 @@ func (service *Service) failStream(stream *ActiveStream, terminalCode string, ca
 	if errors.As(cause, &providerErr) || resolvedTerminalCode == "provider_error" {
 		metadataType = "provider_error"
 	}
+	// ponytail: visible error log — silence hides upstream stream resets (common with
+	// heavy-reasoning models whose providers close idle streaming connections).
+	log.Printf("forwarder stream failed request_id=%s terminal_code=%s err=%v",
+		strings.TrimSpace(stream.RequestID), resolvedTerminalCode, errorText)
 	_, _ = service.appendConversationEntries(stream, stream.ConversationID, []HistoryEntry{
 		newMetadataEntry(stream.TurnSeq, stream.RequestID, metadataType, map[string]any{
 			"error": errorText,
