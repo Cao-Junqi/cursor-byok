@@ -1,6 +1,6 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-02（commit `4bf92f7`，branch `fix/perf-leaks`）
+> 最后更新：2026-08-02（commit `f4a0584`，branch `fix/perf-leaks`）
 
 ## 已完成的工作
 
@@ -33,7 +33,23 @@
 - **测试**：`go test ./internal/mitm/...` 通过
 - **状态**：已推送到 `fix/perf-leaks`，等待 GitHub Actions 构建
 
-## 当前分支状态
+### Fix 4：Provider pass 无上限导致 agent 会话无限循环（`f4a0584`）
+
+- **问题**：同一个 request_id 在6分钟内执行了42次 provider pass（pass 1-42），Cursor 客户端侧超时后强制中断会话
+- **根因**：`forwarder/actor.go` 的 `handleProviderDoneEvent` 在 `hadToolInvocation=true` 时无条件继续循环，没有上限守卫
+- **触发场景**：用户要求 "多 agents 同步推进" → 模型连续调用 `Task` 工具派生子 agents → 子任务每次完成后继续触发新 pass → 无限循环
+- **修复**：
+  - `internal/backend/forwarder/service.go`：新增常量 `maxProviderPassesPerTurn = 50`
+  - `internal/backend/forwarder/actor.go`：在循环继续条件前检查 pass 数，超限则 `failStream("max_provider_passes_exceeded")`
+- **状态**：已推送到 `fix/perf-leaks`
+
+### 附：CoT 泄漏分析（未修复，外部依赖问题）
+
+- **现象**：Cursor 聊天里出现 `"Wait, the user said "多 agents 同步推进", so let me use Task to delegate coherent work.}"` 这类推理文字
+- **根因**：上游 OpenAI-compatible 代理（`atmai.site`/`tsyjzzz.com`）在 streaming response 里把推理内容直接混入 content text chunk，没有 `<think>` 标签包裹。`openAIThinkTagParser` 只过滤有 `<think>...</think>` 标签的推理块，无标签的内容直接作为 `TextDelta` 输出
+- **代码路径**：`internal/backend/agent/model/openai.go` → `openAIThinkTagParser.Consume()` → 无标签推理内容 → `emitTextDelta` → Cursor 聊天
+- **无法在代码层简单修复**：不加标签的推理内容与正常回复文本无法可靠区分，需要上游代理修复输出格式
+- **缓解方案**（可选）：对接使用 `reasoning_content` 字段的代理（已在 `openai.go:562` 支持），或换用支持 Anthropic 原生 thinking block 的端点
 
 ```
 branch: fix/perf-leaks
