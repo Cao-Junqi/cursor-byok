@@ -33,6 +33,9 @@ const (
 	defaultSummaryCompletedThought = "Chat context summarized"
 	providerDefaultMaxOutputTokens = 65536
 	providerOutputSafetyTokens     = 1024
+	// ponytail: hard ceiling to stop runaway tool loops; a legitimate multi-step
+	// agent rarely needs more than this. Raise if a valid use case hits the limit.
+	maxProviderPassesPerTurn = 50
 
 	runtimeThinkingEffortParameterID = "thinking_effort"
 )

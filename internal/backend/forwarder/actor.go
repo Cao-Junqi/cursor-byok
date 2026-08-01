@@ -801,6 +801,11 @@ func (service *Service) handleProviderDoneEvent(stream *ActiveStream, payload *s
 	}
 
 	if (hadToolInvocation || shouldResumeAfterToolResults(finishReason)) && !terminalToolInvocation {
+		if currentProviderPass(stream) >= maxProviderPassesPerTurn {
+			service.setTurnPhase(stream, TurnPhaseFailed)
+			return service.failStream(stream, "max_provider_passes_exceeded",
+				fmt.Errorf("provider pass limit reached (%d); possible infinite tool loop", maxProviderPassesPerTurn))
+		}
 		if err := service.publishCheckpoint(requestID, conversationID); err != nil {
 			return service.failStreamIfNonTerminal(stream, "unknown", err)
 		}
