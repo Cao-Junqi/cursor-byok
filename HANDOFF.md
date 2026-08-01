@@ -1,6 +1,6 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-02（commit `fc567f7`，branch `fix/perf-leaks`，v0.0.41）
+> 最后更新：2026-08-02（commit `74a0ca2`，branch `fix/perf-leaks`，v0.0.42）
 
 ## 已完成的工作
 
@@ -49,6 +49,16 @@
 - **根因**：deepseek-v4 每 pass 消耗大量 reasoning tokens（max effort），经 21 pass 后输出 token 预算耗尽 → `finish_reason=length` → tool call 被截断。后端把 `length` 当作正常 `stop` 处理，静默完成 turn，日志无任何错误，调用方看不到任何提示
 - **修复**：`internal/backend/forwarder/actor.go` `handleProviderDoneEvent`：检测 `finish_reason=length && !hadToolInvocation` 时显式 `failStream("max_tokens_exceeded")` 并打印日志，用户在 Cursor 中看到明确错误
 - **版本**：`0.0.40` → `0.0.41`
+- **状态**：已推送到 `fix/perf-leaks`
+
+### Fix 6+7：stream 错误可见性 + 响应头超时（`74a0ca2`）
+
+- **问题**：使用 LongCat-2.0（reasoningEffort=xhigh）、deepseek-v4-pro（reasoningEffort=high）时，agent 在 reasoning 中途停止，app.log 无任何错误
+- **根因**：重推理模型在"深度思考"阶段不输出 token，上游 LLM 提供商（atmai.site / ark.cn / api.longcat.chat）在 streaming 空闲超过 N 秒后静默关闭 TCP 连接。`failStream` 只写 history metadata 不写 app.log，所以中断完全隐形
+- **修复**：
+  - Fix 6：`service.go` `failStream` 增加 `log.Printf`，所有 stream 失败现在出现在 app.log
+  - Fix 7：`netproxy.go` `cloneDefaultTransport` 加 `ResponseHeaderTimeout=60s`，上游 drop 连接时60秒内就能检测到并报错，不再等 OS TCP keepalive（15+ 分钟）
+- **版本**：`0.0.41` → `0.0.42`
 - **状态**：已推送到 `fix/perf-leaks`
 
 ---
