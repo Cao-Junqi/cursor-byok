@@ -1,6 +1,6 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-02（commit `f4a0584`，branch `fix/perf-leaks`）
+> 最后更新：2026-08-02（commit `fc567f7`，branch `fix/perf-leaks`，v0.0.41）
 
 ## 已完成的工作
 
@@ -42,6 +42,16 @@
   - `internal/backend/forwarder/service.go`：新增常量 `maxProviderPassesPerTurn = 50`
   - `internal/backend/forwarder/actor.go`：在循环继续条件前检查 pass 数，超限则 `failStream("max_provider_passes_exceeded")`
 - **状态**：已推送到 `fix/perf-leaks`
+
+### Fix 5：`finish_reason=length` 静默中止（`fc567f7`）
+
+- **问题**：使用 arkcoding deepseek-v4（`reasoningEffort: max`）时，agent 在 ~21 pass 后无任何错误日志，直接停止。最后响应"现在运行测试"，但 tool call 未执行
+- **根因**：deepseek-v4 每 pass 消耗大量 reasoning tokens（max effort），经 21 pass 后输出 token 预算耗尽 → `finish_reason=length` → tool call 被截断。后端把 `length` 当作正常 `stop` 处理，静默完成 turn，日志无任何错误，调用方看不到任何提示
+- **修复**：`internal/backend/forwarder/actor.go` `handleProviderDoneEvent`：检测 `finish_reason=length && !hadToolInvocation` 时显式 `failStream("max_tokens_exceeded")` 并打印日志，用户在 Cursor 中看到明确错误
+- **版本**：`0.0.40` → `0.0.41`
+- **状态**：已推送到 `fix/perf-leaks`
+
+---
 
 ### 附：CoT 泄漏分析（未修复，外部依赖问题）
 
