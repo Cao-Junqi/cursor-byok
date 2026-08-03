@@ -55,6 +55,9 @@ jobs:
       - name: Build Windows amd64 release archive
         run: task release:build:windows:amd64
 
+      - name: Generate release notes
+        run: task release:notes
+
       - name: Extract version
         id: version
         run: |
