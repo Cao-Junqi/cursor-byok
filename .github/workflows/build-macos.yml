@@ -58,9 +58,6 @@ jobs:
       - name: Build Windows amd64 release archive
         run: task release:build:windows:amd64
 
-      - name: Build Linux amd64 release archive
-        run: task release:build:linux:amd64
-
       - name: Extract version
         id: version
         run: |
@@ -71,7 +68,47 @@ jobs:
         run: go run ./scripts/release notes -config ./build/config.yml -out bin/release/${{ steps.version.outputs.version }}/.release-notes.md -source release-notes.md
 
       - name: Generate update manifest
-        run: go run ./scripts/release manifest -config ./build/config.yml -assets-dir bin/release/${{ steps.version.outputs.version }} -out update.json -repo Cao-Junqi/cursor-byok -base-name cursor-byok -notes bin/release/${{ steps.version.outputs.version }}/.release-notes.md
+        run: |
+          set -e
+          ASSETS_DIR="bin/release/${{ steps.version.outputs.version }}"
+          REPO="Cao-Junqi/cursor-byok"
+          VER="${{ steps.version.outputs.version }}"
+          TMPFILE=$(mktemp)
+          echo '{' > "$TMPFILE"
+          echo "  \"version\": \"${VER}\"," >> "$TMPFILE"
+          echo "  \"release_date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> "$TMPFILE"
+          echo '  "release_notes": "See GitHub Release for details",' >> "$TMPFILE"
+          echo '  "platforms": {' >> "$TMPFILE"
+          FIRST=true
+          for PLATFORM in macos-arm64 macos-amd64 windows-amd64; do
+            if [[ "$PLATFORM" == macos-* ]]; then
+              ASSET="$ASSETS_DIR/cursor-byok-${VER}-${PLATFORM}.tar.gz"
+              SUF=".tar.gz"
+            else
+              ASSET="$ASSETS_DIR/cursor-byok-${VER}-${PLATFORM}.zip"
+              SUF=".zip"
+            fi
+            if [ ! -f "$ASSET" ]; then
+              echo "Warning: $ASSET not found, skipping $PLATFORM" >&2
+              continue
+            fi
+            CS=$(shasum -a 256 "$ASSET" | cut -d' ' -f1)
+            SZ=$(stat -f%z "$ASSET")
+            URL="https://github.com/${REPO}/downloads/v${VER}/cursor-byok-${VER}-${PLATFORM}${SUF}"
+            if [ "$FIRST" = false ]; then echo ',' >> "$TMPFILE"; fi
+            echo "    \"${PLATFORM}\": {" >> "$TMPFILE"
+            echo "      \"url\": \"${URL}\"," >> "$TMPFILE"
+            echo "      \"size\": ${SZ}," >> "$TMPFILE"
+            echo "      \"checksum\": \"sha256:${CS}\"" >> "$TMPFILE"
+            echo -n '    }' >> "$TMPFILE"
+            FIRST=false
+          done
+          echo '' >> "$TMPFILE"
+          echo '  }' >> "$TMPFILE"
+          echo '}' >> "$TMPFILE"
+          jq . "$TMPFILE"
+          cp "$TMPFILE" update.json
+          rm -f "$TMPFILE"
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
