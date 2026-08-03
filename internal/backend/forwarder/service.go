@@ -50,8 +50,8 @@ const (
 	// keeps the TCP connection open but stops sending data (common with LongCat and
 	// deepseek during long silent thinking) leaves the client hanging until the model
 	// layer's 4-min idle watchdog fires — far longer than Cursor's client timeout.
-	providerStreamTTFTTimeout       = 60 * time.Second
-	providerStreamInterTokenTimeout = 12 * time.Second
+	providerStreamTTFTTimeout       = 120 * time.Second
+	providerStreamInterTokenTimeout = 60 * time.Second
 
 	runtimeThinkingEffortParameterID = "thinking_effort"
 )
