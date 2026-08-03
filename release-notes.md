@@ -1,6 +1,6 @@
 # Release Notes
 
-## [Unreleased] — fix/perf-leaks — v0.0.50
+## [Unreleased] — fix/perf-leaks — v0.0.51
 
 ### fix: 彻底解决大模型长上下文中途无征兆挂起 (Fix 5 补充修复)
 
