@@ -55,14 +55,14 @@ jobs:
       - name: Build Windows amd64 release archive
         run: task release:build:windows:amd64
 
-      - name: Generate release notes
-        run: task release:notes
-
       - name: Extract version
         id: version
         run: |
           VERSION=$(yq '.info.version' build/config.yml)
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        run: go run ./scripts/release notes -config ./build/config.yml -out bin/release/${{ steps.version.outputs.version }}/.release-notes.md -source release-notes.md
 
       - name: Generate update manifest
         run: go run ./scripts/release manifest -config ./build/config.yml -assets-dir bin/release/${{ steps.version.outputs.version }} -out update.json -repo Cao-Junqi/cursor-byok -base-name cursor-byok -notes bin/release/${{ steps.version.outputs.version }}/.release-notes.md
