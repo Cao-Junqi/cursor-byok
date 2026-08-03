@@ -1,6 +1,20 @@
 # Release Notes
 
-## [Unreleased] — fix/perf-leaks — v0.0.45
+## [Unreleased] — fix/perf-leaks — v0.0.50
+
+### fix: 彻底解决大模型长上下文中途无征兆挂起 (Fix 5 补充修复)
+
+**症状**：使用 deepseek-v4 等高 reasoningEffort 模型，在输出大量内容或多次调用工具后，模型突然停止，Loading 图标变为发送箭头，且应用内没有任何错误提示。
+**根因**：模型因为达到 output tokens 上限导致 `finish_reason=length`，导致发给 Cursor 的 `tool_call` JSON 不完整。旧逻辑中，若在 `length` 前有过 tool call（`hadToolInvocation == true`），则会错误地将连接标记为正常结束。Cursor 收到不完整的 JSON 后直接丢弃，导致模型调用被迫静默中止。
+**修复**：在 `actor.go` 中，移除了针对 `hadToolInvocation` 的放行判断，只要遇到 `finish_reason=length`，一律向前端抛出红色的 `max_tokens_exceeded` 错误。从此可以明确看到是因为模型 Token 耗尽而结束，打破无征兆中断的现象。
+
+### fix: 修复外接非 Retina 显示器时界面滑动模糊的问题
+
+**症状**：客户端程序界面模糊，在不同分辨率下显示器滑动不清晰。
+**根因**：Wails 3 客户端的 `Backdrop` 配置使用了 `MacBackdropLiquidGlass` 毛玻璃半透明特效，与不透明的深色背景色混合叠加，导致在外部非高清显示器渲染时性能下降，产生抗锯齿异常和滑动撕裂。
+**修复**：修改 `internal/app/runner.go` 主窗口属性，将 `Backdrop` 改为 `application.MacBackdropNone` 取消模糊层特效，恢复系统原生渲染模式，彻底解决滑动及文本发虚问题。
+
+---
 
 ### feat: 自动发布 + 自动更新（Fix 10）
 

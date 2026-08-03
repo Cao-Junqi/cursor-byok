@@ -735,8 +735,8 @@ func (service *Service) handleProviderDoneEvent(stream *ActiveStream, payload *s
 	// With heavy reasoning models (e.g. deepseek-v4 reasoningEffort=max), tool calls can be
 	// silently truncated, leaving the turn appearing to complete normally. Fail explicitly so
 	// the user sees an actionable error instead of a mysterious stop.
-	if strings.EqualFold(strings.TrimSpace(finishReason), "length") && !hadToolInvocation {
-		log.Printf("forwarder max_tokens_exceeded request_id=%s provider_pass=%d finish_reason=length had_tool_invocation=false; tool call likely truncated",
+	if strings.EqualFold(strings.TrimSpace(finishReason), "length") {
+		log.Printf("forwarder max_tokens_exceeded request_id=%s provider_pass=%d finish_reason=length; output likely truncated",
 			strings.TrimSpace(requestID), currentProviderPass(stream))
 		service.setTurnPhase(stream, TurnPhaseFailed)
 		return service.failStream(stream, "max_tokens_exceeded",

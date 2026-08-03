@@ -125,7 +125,7 @@ func Run(resources EmbeddedResources) error {
 		CloseButtonState:    application.ButtonEnabled,
 		BackgroundColour:    application.RGBA{Red: 25, Green: 25, Blue: 25, Alpha: 255},
 		Mac: application.MacWindow{
-			Backdrop:      application.MacBackdropLiquidGlass,
+			Backdrop:      application.MacBackdropNone,
 			DisableShadow: false,
 			TitleBar: application.MacTitleBar{
 				AppearsTransparent:   true,
