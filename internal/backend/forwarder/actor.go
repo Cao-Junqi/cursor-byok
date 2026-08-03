@@ -733,14 +733,22 @@ func (service *Service) handleProviderDoneEvent(stream *ActiveStream, payload *s
 	}
 	// ponytail: finish_reason=length means the model hit its output token budget mid-generation.
 	// With heavy reasoning models (e.g. deepseek-v4 reasoningEffort=max), tool calls can be
-	// silently truncated, leaving the turn appearing to complete normally. Fail explicitly so
-	// the user sees an actionable error instead of a mysterious stop.
+	// silently truncated, leaving the turn appearing to complete normally.
+	// To prevent the autonomous agent loop from stalling out, we inject a synthetic tool call
+	// to notify the model that it was truncated, which forces the agent loop to continue.
 	if strings.EqualFold(strings.TrimSpace(finishReason), "length") {
-		log.Printf("forwarder max_tokens_exceeded request_id=%s provider_pass=%d finish_reason=length; output likely truncated",
+		log.Printf("forwarder max_tokens_exceeded request_id=%s provider_pass=%d finish_reason=length; injecting auto-continue tool",
 			strings.TrimSpace(requestID), currentProviderPass(stream))
-		service.setTurnPhase(stream, TurnPhaseFailed)
-		return service.failStream(stream, "max_tokens_exceeded",
-			fmt.Errorf("provider pass %d output truncated by token limit (finish_reason=length); reduce reasoning effort or shorten context", currentProviderPass(stream)))
+
+		fakeInvocation := runtimecore.ToolInvocation{
+			CallID:      fmt.Sprintf("call_continue_%d", time.Now().UnixNano()),
+			ToolName:    "run_terminal_cmd",
+			ArgsJSON:    []byte(`{"command": "echo '[Notice] The previous output was truncated due to max_tokens limit. Please continue your task from where you left off.'"}`),
+			ModelCallID: modelCallID,
+		}
+		if err := service.handleToolInvocation(stream, fakeInvocation); err != nil {
+			log.Printf("failed to inject auto-continue tool: %v", err)
+		}
 	}
 	if err := service.recordTurnUsageSnapshot(stream, conversationID, turnSeq, requestID, modelCallID, "completed", usage, "", false); err != nil {
 		return service.failStreamIfNonTerminal(stream, "usage_persistence_error", err)

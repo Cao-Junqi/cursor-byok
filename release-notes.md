@@ -1,8 +1,8 @@
 # Release Notes
 
-## [Unreleased] — fix/perf-leaks — v0.0.51
+## [Unreleased] — feat/auto-continue — v0.0.52
 
-### fix: 彻底解决大模型长上下文中途无征兆挂起 (Fix 5 补充修复)
+### feat: 支持大模型输出截断（finish_reason=length）后自动触发无感续写
 
 **症状**：使用 deepseek-v4 等高 reasoningEffort 模型，在输出大量内容或多次调用工具后，模型突然停止，Loading 图标变为发送箭头，且应用内没有任何错误提示。
 **根因**：模型因为达到 output tokens 上限导致 `finish_reason=length`，导致发给 Cursor 的 `tool_call` JSON 不完整。旧逻辑中，若在 `length` 前有过 tool call（`hadToolInvocation == true`），则会错误地将连接标记为正常结束。Cursor 收到不完整的 JSON 后直接丢弃，导致模型调用被迫静默中止。
