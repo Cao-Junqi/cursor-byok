@@ -62,7 +62,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Generate update manifest
-        run: task release:manifest -config ./build/config.yml -assets-dir bin/release/${{ steps.version.outputs.version }} -out update.json -repo Cao-Junqi/cursor-byok -notes bin/release/${{ steps.version.outputs.version }}/.release-notes.md
+        run: go run ./scripts/release manifest -config ./build/config.yml -assets-dir bin/release/${{ steps.version.outputs.version }} -out update.json -repo Cao-Junqi/cursor-byok -base-name cursor-byok -notes bin/release/${{ steps.version.outputs.version }}/.release-notes.md
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
