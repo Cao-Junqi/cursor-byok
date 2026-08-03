@@ -2,8 +2,11 @@ name: Build macOS
 
 on:
   push:
-    branches: ["fix/perf-leaks"]
+    branches: ["main", "fix/perf-leaks"]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -46,9 +49,48 @@ jobs:
       - name: Build macOS arm64 DMG
         run: task build:darwin:arm64
 
+      - name: Build macOS arm64 release archive
+        run: task release:build:macos:arm64
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(yq '.info.version' build/config.yml)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Generate update manifest
+        run: |
+          ARCHIVE_PATH="bin/release/${{ steps.version.outputs.version }}/cursor-byok-${{ steps.version.outputs.version }}-macos-arm64.tar.gz"
+          CHECKSUM=$(shasum -a 256 "$ARCHIVE_PATH" | cut -d' ' -f1)
+          SIZE=$(stat -f%z "$ARCHIVE_PATH")
+          cat > update.json <<EOF
+          {
+            "version": "${{ steps.version.outputs.version }}",
+            "release_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "release_notes": "See GitHub Release for details",
+            "platforms": {
+              "macos-arm64": {
+                "url": "https://github.com/Cao-Junqi/cursor-byok/releases/download/v${{ steps.version.outputs.version }}/cursor-byok-${{ steps.version.outputs.version }}-macos-arm64.tar.gz",
+                "size": ${SIZE},
+                "checksum": "sha256:${CHECKSUM}"
+              }
+            }
+          }
+          EOF
+
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
           name: cursor-byok-macos-arm64
           path: bin/macos-arm64.dmg
           if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          body_path: bin/release/${{ steps.version.outputs.version }}/.release-notes.md
+          files: |
+            bin/release/${{ steps.version.outputs.version }}/cursor-byok-${{ steps.version.outputs.version }}-macos-arm64.tar.gz
+            update.json
