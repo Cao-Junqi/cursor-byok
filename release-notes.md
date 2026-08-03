@@ -1,6 +1,20 @@
 # Release Notes
 
-## [Unreleased] — fix/perf-leaks — v0.0.43
+## [Unreleased] — fix/perf-leaks — v0.0.44
+
+### fix: stream idle watchdog — 快速检测上游挂起（Fix 9）
+
+**症状**：使用 LongCat-2.0、deepseek-v4-pro 等重推理模型时，agent 在 pass 中途停止，app.log 无错误，session 无声消失。
+
+**根因**：上游 LLM 提供商在 streaming 中途停止输出但不关闭 TCP 连接（模型"深度思考"阶段）。proxy 会一直等到模型层的 4 分钟 idle watchdog 才触发——远长于 Cursor 客户端超时（10-20 秒），所以用户看到 session 突然中断。
+
+**修复**：`service.go` `runProviderStream` 增加 60 秒 idle watchdog：
+- 每收到一个 event 重置 timer
+- 60 秒无新 event → 取消 context
+- 零事件取消 → 触发透明重试
+- 部分事件取消 → 触发 failStream，agent 可见错误
+
+---
 
 ### fix: provider stream 自动重试（Fix 8）
 

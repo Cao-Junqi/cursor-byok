@@ -1,6 +1,6 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-02（commit `1bccbcc`，branch `fix/perf-leaks`，v0.0.43）
+> 最后更新：2026-08-03（commit `dbf5fab`，branch `fix/perf-leaks`，v0.0.44）
 
 ## 已完成的工作
 
@@ -51,7 +51,18 @@
 - **版本**：`0.0.40` → `0.0.41`
 - **状态**：已推送到 `fix/perf-leaks`
 
-### Fix 8：provider stream 透明自动重试（v0.0.43，待提交）
+### Fix 9：stream idle watchdog — 快速检测上游挂起（`dbf5fab`，v0.0.44）
+
+- **问题**：LongCat-2.0、deepseek-v4-pro 等重推理模型在 streaming 中途停止输出但不关闭 TCP 连接，proxy 等到 4 分钟 idle watchdog 才触发，远长于 Cursor 客户端超时
+- **修复**：`service.go` `runProviderStream` 增加 60 秒 idle watchdog
+  - 每收到 event 重置 timer
+  - 60 秒无 event → 取消 context
+  - 零事件 → 透明重试；部分事件 → failStream
+- **状态**：已推送到 `fix/perf-leaks`
+
+---
+
+### Fix 8：provider stream 透明自动重试（`1bccbcc`，v0.0.43）
 
 - **问题**：使用 LongCat-2.0（xhigh reasoning）、deepseek-v4-pro（high reasoning）时，agent 在 pass 中途停止，app.log 无错误，session 无声消失
 - **根因**：上游 LLM 提供商在 streaming 空闲或单请求时长达到上限时静默关闭 TCP 连接。proxy 层将错误静默吞掉
