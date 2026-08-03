@@ -1,6 +1,18 @@
 # Release Notes
 
-## [Unreleased] — fix/perf-leaks — v0.0.44
+## [Unreleased] — fix/perf-leaks — v0.0.45
+
+### feat: 自动发布 + 自动更新（Fix 10）
+
+**背景**：`internal/updater/manager.go` 已有完整的更新管理器（检查、下载、验证、安装、重启），但从未接入实际 Release。
+
+**修复**：
+- `.github/workflows/build-macos.yml` 推送到 `main` 时自动编译 + 发布 GitHub Release
+- 生成 `update.json` manifest（版本、checksum、平台下载 URL）
+- 上传 `.tar.gz` 归档（updater 格式）作为 Release asset
+- 旧版 Cursor 助手 20 分钟内自动检测到新 Release，提示用户一键安装
+
+---
 
 ### fix: stream idle watchdog — 快速检测上游挂起（Fix 9）
 

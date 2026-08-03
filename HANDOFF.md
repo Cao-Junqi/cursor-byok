@@ -1,6 +1,6 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-03（commit `dbf5fab`，branch `fix/perf-leaks`，v0.0.44）
+> 最后更新：2026-08-03（commit `484f563`，branch `fix/perf-leaks`，v0.0.45）
 
 ## 已完成的工作
 
@@ -50,6 +50,18 @@
 - **修复**：`internal/backend/forwarder/actor.go` `handleProviderDoneEvent`：检测 `finish_reason=length && !hadToolInvocation` 时显式 `failStream("max_tokens_exceeded")` 并打印日志，用户在 Cursor 中看到明确错误
 - **版本**：`0.0.40` → `0.0.41`
 - **状态**：已推送到 `fix/perf-leaks`
+
+### Fix 10：自动发布 + 自动更新（`484f563`，v0.0.45）
+
+- **背景**：`internal/updater/manager.go` 已有完整更新管理器但从未接入 Release
+- **修复**：
+  - GitHub Actions 推送到 `main` 时自动编译 + 发布 GitHub Release
+  - 生成 `update.json` manifest
+  - 上传 `.tar.gz` 归档作为 Release asset
+  - 旧版 Cursor 助手 20 分钟内自动检测并提示安装
+- **状态**：已推送到 `fix/perf-leaks`
+
+---
 
 ### Fix 9：stream idle watchdog — 快速检测上游挂起（`dbf5fab`，v0.0.44）
 
