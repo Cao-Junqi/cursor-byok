@@ -45,6 +45,13 @@ const (
 	maxProviderStreamRetries    = 3
 	providerStreamRetryBaseDelay = 2 * time.Second
 
+	// ponytail: stream idle watchdog. If no events reach the actor for this duration,
+	// cancel the context to surface a retryable error. Without it, an upstream that
+	// keeps the TCP connection open but stops sending data (common with LongCat and
+	// deepseek during long silent thinking) leaves the client hanging until the model
+	// layer's 4-min idle watchdog fires — far longer than Cursor's client timeout.
+	providerStreamIdleTimeout = 60 * time.Second
+
 	runtimeThinkingEffortParameterID = "thinking_effort"
 )
 
@@ -1585,7 +1592,33 @@ func (service *Service) persistDerivedPromptContexts(stream *ActiveStream, conve
 
 func (service *Service) runProviderStream(stream *ActiveStream, token uint64, ctx context.Context, request ProviderRequest, retryCount int) {
 	var streamEventsSent int64
-	err := service.provider.StartStream(ctx, request, func(event modeladapter.ModelEvent) error {
+	// ponytail: idle watchdog — detect upstream silence (model stopped sending but
+	// connection still open). Cancel the context so StartStream returns and the
+	// retry/failStream path fires. Reset on every event received. Mid-stream
+	// cancels surface as a typed error the agent can react to; clean cancels
+	// (zero events) trigger transparent retry.
+	idleTimer := time.NewTimer(providerStreamIdleTimeout)
+	defer idleTimer.Stop()
+	streamCtx, streamCancel := context.WithCancel(ctx)
+	streamDone := make(chan struct{})
+	defer close(streamDone)
+	go func() {
+		select {
+		case <-idleTimer.C:
+			// ponytail: upstream went silent. Surface as retryable (clean) or
+			// typed error (partial) so the agent can react instead of hanging.
+			log.Printf("forwarder stream idle timeout request_id=%s model_call_id=%s events_sent=%d",
+				strings.TrimSpace(request.RequestID),
+				strings.TrimSpace(request.ModelCallID),
+				atomic.LoadInt64(&streamEventsSent),
+			)
+			streamCancel()
+		case <-ctx.Done():
+		case <-streamDone:
+		}
+	}()
+	err := service.provider.StartStream(streamCtx, request, func(event modeladapter.ModelEvent) error {
+		idleTimer.Reset(providerStreamIdleTimeout)
 		atomic.AddInt64(&streamEventsSent, 1)
 		return service.postStreamCommandWait(stream, streamCommand{
 			Kind: streamCommandProviderEvent,
