@@ -12,6 +12,9 @@ cursor-byok 是 **Cursor 助手**（`/Applications/Cursor助手.app`，bundle ID
 - **Vue3 前端**：`frontend/` 目录，HeroUI 组件库
 - **代理层**：`github.com/elazarl/goproxy`，入口 `internal/mitm/service.go`
 - **backend/forwarder**：本地 AI 推理转发内核，`internal/backend/`
+- **自动更新**：`internal/updater/manager.go`（检查、下载、验证、安装、重启），`internal/buildinfo/buildinfo.go`（版本、UpdateBaseURL）
+- **配置**：`~/.cursor-local-assistant-v2/config.yaml`
+- **数据目录**：`~/.cursor-local-assistant-v2/`
 - **配置**：`~/.cursor-local-assistant-v2/config.yaml`
 - **数据目录**：`~/.cursor-local-assistant-v2/`
 
@@ -95,6 +98,29 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | 模型配置丢失 | `config.yaml` 中的 `modelAdapters` 列表 |
 | 代理未生效 | Cursor settings.json 中的 `http.proxy` 和 `cursor.general.disableHttp2` |
 | MITM CA 不信任 | `data/ca.crt` 是否正确注入；`logs/app.log` 中的 CA info |
+| provider stream 中途断开 | `logs/app.log` 中的 `stream failed`、`stream retry`、`stream idle timeout` |
+| 自动更新失败 | `logs/app.log` 中的 `检查更新失败`、`download update` 错误 |
+
+## 最新修复记录（v0.0.45）
+
+| Fix | 文件 | 说明 |
+|-----|------|------|
+| 5 | `internal/backend/forwarder/actor.go` | `finish_reason=length && !hadToolInvocation` 时显式 failStream |
+| 6 | `internal/backend/forwarder/service.go` | failStream 加 log.Printf |
+| 7 | `internal/netproxy/netproxy.go` | cloneDefaultTransport 加 ResponseHeaderTimeout=60s |
+| 8 | `internal/backend/forwarder/service.go` | runProviderStream 零事件失败透明重试（3次退避） |
+| 9 | `internal/backend/forwarder/service.go` | runProviderStream 60s idle watchdog |
+| 10 | `.github/workflows/build-macos.yml` | 推送到 main 自动编译 + 发布 Release（macOS+Windows） |
+
+### 未解决：Session 中断（v0.0.45 仍存在）
+
+使用 LongCat-2.0（reasoningEffort=xhigh）时，pass 11 中途模型停止输出，日志无任何错误。
+
+**已排除**：上游 SLA 99.99%（用户确认）、不用 proxy 稳定（用户确认）、Fix 5/6/7/8/9 已生效但问题仍存在。
+
+**待验证**：
+- 抓包确认是谁先断开 SSE 连接（Cursor 客户端 vs 上游）
+- Cursor 结构化日志（`~/Library/Logs/Cursor/`）中的断开错误信息
 
 ## 约束
 
