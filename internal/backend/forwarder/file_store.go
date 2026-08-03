@@ -657,11 +657,14 @@ func deriveRequestLoopStatus(entries []HistoryEntry, requestID string, turnSeq i
 			}
 		}
 	}
+	if len(openToolCalls) > 0 {
+		if terminalStatus != "" && terminalStatus != "completed" {
+			return terminalStatus
+		}
+		return "waiting_tool"
+	}
 	if terminalStatus != "" {
 		return terminalStatus
-	}
-	if len(openToolCalls) > 0 {
-		return "waiting_tool"
 	}
 	if seenActivity {
 		return "running"

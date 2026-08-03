@@ -668,7 +668,7 @@ func isTunnelOnlyHost(host string) bool {
 		host = strings.ToLower(strings.TrimSpace(host))
 	}
 	switch host {
-	case "api3.cursor.sh", "metrics.cursor.sh":
+	case "api2.cursor.sh", "api3.cursor.sh", "metrics.cursor.sh":
 		return true
 	}
 	return false
