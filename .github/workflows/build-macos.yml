@@ -58,6 +58,9 @@ jobs:
       - name: Build Windows amd64 release archive
         run: task release:build:windows:amd64
 
+      - name: Build Linux amd64 release archive
+        run: task release:build:linux:amd64
+
       - name: Extract version
         id: version
         run: |
