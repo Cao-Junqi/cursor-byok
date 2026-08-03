@@ -50,7 +50,8 @@ const (
 	// keeps the TCP connection open but stops sending data (common with LongCat and
 	// deepseek during long silent thinking) leaves the client hanging until the model
 	// layer's 4-min idle watchdog fires — far longer than Cursor's client timeout.
-	providerStreamIdleTimeout = 60 * time.Second
+	providerStreamTTFTTimeout       = 60 * time.Second
+	providerStreamInterTokenTimeout = 12 * time.Second
 
 	runtimeThinkingEffortParameterID = "thinking_effort"
 )
@@ -1597,7 +1598,7 @@ func (service *Service) runProviderStream(stream *ActiveStream, token uint64, ct
 	// retry/failStream path fires. Reset on every event received. Mid-stream
 	// cancels surface as a typed error the agent can react to; clean cancels
 	// (zero events) trigger transparent retry.
-	idleTimer := time.NewTimer(providerStreamIdleTimeout)
+	idleTimer := time.NewTimer(providerStreamTTFTTimeout)
 	defer idleTimer.Stop()
 	streamCtx, streamCancel := context.WithCancel(ctx)
 	streamDone := make(chan struct{})
@@ -1618,7 +1619,7 @@ func (service *Service) runProviderStream(stream *ActiveStream, token uint64, ct
 		}
 	}()
 	err := service.provider.StartStream(streamCtx, request, func(event modeladapter.ModelEvent) error {
-		idleTimer.Reset(providerStreamIdleTimeout)
+		idleTimer.Reset(providerStreamInterTokenTimeout)
 		atomic.AddInt64(&streamEventsSent, 1)
 		return service.postStreamCommandWait(stream, streamCommand{
 			Kind: streamCommandProviderEvent,
