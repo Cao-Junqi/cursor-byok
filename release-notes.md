@@ -1,6 +1,6 @@
 # Release Notes
 
-## [Unreleased] — v0.0.53
+## [Unreleased] — v0.0.54
 
 ### fix: 输出 Token 截断后可靠自动续跑
 
@@ -13,6 +13,11 @@
 
 **问题**：`update.json` 使用不存在的 GitHub `/downloads/` 路径，可能出现检测到新版本但下载不到对应安装包。
 **修复**：平台资产 URL 改为 GitHub Release 的 `/releases/download/v<version>/...` 格式。
+
+### fix: Release tag 绑定实际构建提交
+
+**问题**：仓库默认分支仍指向旧分支，GitHub Action 未指定 `target_commitish` 时会让新 tag 指向旧提交，即使上传的二进制来自最新 `main`。
+**修复**：发布步骤显式使用 `${{ github.sha }}` 创建 tag，使源码 tag、构建提交和发布产物保持一致。
 
 ### fix: 修复外接非 Retina 显示器时界面滑动模糊的问题
 

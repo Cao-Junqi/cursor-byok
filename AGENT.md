@@ -101,7 +101,7 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | provider stream 中途断开 | `logs/app.log` 中的 `stream failed`、`stream retry`、`stream idle timeout` |
 | 自动更新失败 | `logs/app.log` 中的 `检查更新失败`、`download update` 错误 |
 
-## 最新修复记录（v0.0.53）
+## 最新修复记录（v0.0.54）
 
 | Fix | 文件 | 说明 |
 |-----|------|------|
@@ -111,22 +111,22 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | 8 | `internal/backend/forwarder/service.go` | runProviderStream 零事件失败透明重试（3次退避） |
 | 9 | `internal/backend/forwarder/service.go` | runProviderStream 60s idle watchdog |
 | 10 | `.github/workflows/build-macos.yml` | 推送到 main 自动编译 + 发布 Release（macOS+Windows） |
-| 11 | `internal/backend/forwarder/actor.go`、`reminders.go` | v0.0.53：保留截断输出，写入去重恢复上下文并直接续跑 provider pass |
-| 12 | `.github/workflows/build-macos.yml` | 修正 `update.json` 的 GitHub Release 资产下载路径 |
+| 11 | `internal/backend/forwarder/actor.go`、`reminders.go` | v0.0.54：保留截断输出，写入去重恢复上下文并直接续跑 provider pass |
+| 12 | `.github/workflows/build-macos.yml` | 修正资产下载路径，并将 Release tag 显式绑定实际构建 SHA |
 
-### v0.0.53 待实机确认
+### v0.0.54 待实机确认
 
 本地测试已覆盖 `finish_reason=length` 的续跑判断和恢复上下文去重，但仍需用安装后的 Release 产物触发一次真实 token 截断。
 
 验收标准：
 
-- plist 显示 `0.0.53`
-- 安装目录内真实二进制包含 `C0.0.53`、`token_limit_recovery`、`finish_reason=length resume=`
+- plist 显示 `0.0.54`
+- 安装目录内真实二进制包含 `C0.0.54`、`token_limit_recovery`、`finish_reason=length resume=`
 - 真实截断时 `app.log` 出现 `finish_reason=length resume=true`，随后同一 turn 继续 provider pass
 
 ```bash
 defaults read /Applications/Cursor助手.app/Contents/Info CFBundleShortVersionString
-strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.53|token_limit_recovery|finish_reason=length resume='
+strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.54|token_limit_recovery|finish_reason=length resume='
 ```
 
 ## 约束
