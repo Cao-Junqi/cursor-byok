@@ -1,6 +1,15 @@
 # Release Notes
 
-## [Unreleased] — v0.0.55
+## [Unreleased] — v0.0.56
+
+### fix: 仅产生内部推理时继续当前任务
+
+**症状**：回复显示“继续”后，不到 2 分钟便自动结束；最后只留下类似“现在运行 tsc”的内部推理，计划中的工具没有执行，也没有用户可见答复。
+**根因**：OpenAI Responses 可能以 `finish_reason=completed` 结束一个只包含 reasoning 的响应。后端此前把它视为正常完成，即使该 pass 没有文本也没有工具调用。
+**修复**：识别 `completed`、`stop`、`message_stop`、`end_turn` 下的 reasoning-only 空完成，写入一次 `empty_completion_recovery` 上下文并继续下一次 provider pass；如果恢复后再次空完成则明确失败，50 pass 上限继续防止无限循环。
+**验证**：覆盖 Responses/Chat/Anthropic 正常结束原因、正常文本、已有工具调用、恢复上下文去重和重复空完成；完整 Go 测试、forwarder race test 与前端生产构建通过。
+
+## v0.0.55
 
 ### fix: 兼容 OpenAI Responses 的 Token 截断原因
 

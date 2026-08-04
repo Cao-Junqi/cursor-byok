@@ -1,8 +1,16 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-04（branch `main`，发布目标 v0.0.55）
+> 最后更新：2026-08-04（branch `main`，发布目标 v0.0.56）
 
 ## 已完成的工作
+
+### Fix 14：reasoning-only 空完成自动续跑（v0.0.56）
+
+- **问题**：用户触发“继续”后约 56 秒自动结束，最后只有内部推理，没有执行计划中的工具，也没有用户可见答复
+- **实机证据**：请求 `d86a9f46-5b7c-4bd4-a02f-6e2bc91a36cc` 的最后一个 Responses pass 返回 `finish_reason=completed`，仅产生 `Good. Now let me run tsc again.` reasoning；Cursor 因此把 composer 标记为 `completed`
+- **根因**：后端只恢复 Token 上限和子 Agent 工具结果后的空结束，没有处理主 Agent 的 reasoning-only 正常完成
+- **修复**：对 `completed`、`stop`、`message_stop`、`end_turn` 下“无文本、无工具、有 reasoning”的结果注入一次 `empty_completion_recovery` 并续跑；第二次仍为空时显式 `empty_response` 失败，继续受 50 pass 上限保护
+- **验证**：`go test ./...`、`go test -race ./internal/backend/forwarder`、`frontend/yarn build` 通过
 
 ### Fix 11：输出 Token 截断后可靠自动续跑（v0.0.55）
 
@@ -115,12 +123,12 @@
 - **无法在代码层简单修复**：不加标签的推理内容与正常回复文本无法可靠区分，需要上游代理修复输出格式
 - **缓解方案**（可选）：对接使用 `reasoning_content` 字段的代理（已在 `openai.go:562` 支持），或换用支持 Anthropic 原生 thinking block 的端点
 
-当前开发分支为 `main`，发布目标为 `v0.0.55`。
+当前开发分支为 `main`，发布目标为 `v0.0.56`。
 
 ## 待办 / 未决问题
 
-1. **v0.0.55 实机验证**：安装 GitHub Release 后，按下方命令同时核对 plist 和二进制；不能只相信应用界面显示的版本号。
-2. **Token 截断实测**：遇到真实截断时，日志应出现原始 `finish_reason`（如 `max_output_tokens`）和 `resume=true`，随后同一 turn 启动下一次 provider pass。
+1. **v0.0.56 实机验证**：GitHub Release 构建完成并安装后，按下方命令同时核对 plist 和真实二进制；不能只相信应用界面显示的版本号。
+2. **reasoning-only 实测**：再次出现只有内部推理的正常完成时，日志应出现 `forwarder empty completion ... recovery=resume`，随后同一 turn 启动下一次 provider pass；若连续发生两次则应显示 `empty_response`，不能静默完成。
 3. **`api2.cursor.sh` 上的非 AI 路径**：日志里偶尔出现 `api2.cursor.sh:443 remote error: tls: unknown certificate`，这些是 api2 上的非推理路径（如 feature flag 拉取）。目前 AI 推理正常工作，这些错误不影响功能，但如果以后 api2 的非 AI 路径也出问题，可以考虑对特定 path 做 bypass（需要先 MITM 再按路径判断，或改成 api2 仅对已知 AI 路径做 MITM）。
 4. **前端测试**：Fix 1/2 的前端改动没有自动化测试覆盖，建议人工验证批量导入和分组展示功能。
 
@@ -140,12 +148,12 @@ cat ~/.cursor-local-assistant-v2/config.yaml
 # 验证 Cursor HTTP proxy 设置
 grep -E "proxy|disableHttp2" ~/Library/Application\ Support/Cursor/User/settings.json
 
-# 安装 v0.0.55 后同时核对 bundle 元数据和真实二进制
+# 安装 v0.0.56 后同时核对 bundle 元数据和真实二进制
 defaults read /Applications/Cursor助手.app/Contents/Info CFBundleShortVersionString
-strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.55|token_limit_recovery|max_output_tokens|finish_reason=%s resume='
+strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.56|empty_completion_recovery|recovery=resume|empty_response'
 
 # 与 GitHub Release 资产核对（先下载对应架构的 tar.gz）
-shasum -a 256 cursor-byok-0.0.55-macos-arm64.tar.gz
+shasum -a 256 cursor-byok-0.0.56-macos-arm64.tar.gz
 ```
 
 ## 重要约束（接手时必读）

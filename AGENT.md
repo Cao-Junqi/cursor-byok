@@ -101,7 +101,7 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | provider stream 中途断开 | `logs/app.log` 中的 `stream failed`、`stream retry`、`stream idle timeout` |
 | 自动更新失败 | `logs/app.log` 中的 `检查更新失败`、`download update` 错误 |
 
-## 最新修复记录（v0.0.55）
+## 最新修复记录（v0.0.56）
 
 | Fix | 文件 | 说明 |
 |-----|------|------|
@@ -114,20 +114,21 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | 11 | `internal/backend/forwarder/actor.go`、`reminders.go` | v0.0.54：保留截断输出，写入去重恢复上下文并直接续跑 provider pass |
 | 12 | `.github/workflows/build-macos.yml` | 修正资产下载路径，并将 Release tag 显式绑定实际构建 SHA |
 | 13 | `internal/backend/forwarder/actor.go` | v0.0.55：统一识别 `length`、`max_output_tokens`、`max_tokens` 等 provider Token 截断原因 |
+| 14 | `internal/backend/forwarder/actor.go`、`reminders.go` | v0.0.56：reasoning-only 正常完成时注入一次恢复上下文并续跑，重复空完成显式失败 |
 
-### v0.0.55 待实机确认
+### v0.0.56 待实机确认
 
-本地测试已覆盖各 provider Token 截断原因的续跑判断和恢复上下文去重，但仍需用安装后的 Release 产物触发一次真实 token 截断。
+本地测试已覆盖 reasoning-only 空完成的续跑判断、恢复上下文去重和重复失败，但仍需用安装后的 Release 产物复现一次真实 provider 空完成。
 
 验收标准：
 
-- plist 显示 `0.0.55`
-- 安装目录内真实二进制包含 `C0.0.55`、`token_limit_recovery`、`max_output_tokens`、`finish_reason=%s resume=`
-- 真实截断时 `app.log` 出现原始 finish reason 和 `resume=true`，随后同一 turn 继续 provider pass
+- plist 显示 `0.0.56`
+- 安装目录内真实二进制包含 `C0.0.56`、`empty_completion_recovery`、`recovery=resume`、`empty_response`
+- reasoning-only 正常完成时 `app.log` 出现 `recovery=resume`，随后同一 turn 继续 provider pass
 
 ```bash
 defaults read /Applications/Cursor助手.app/Contents/Info CFBundleShortVersionString
-strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.55|token_limit_recovery|max_output_tokens|finish_reason=%s resume='
+strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.56|empty_completion_recovery|recovery=resume|empty_response'
 ```
 
 ## 约束
