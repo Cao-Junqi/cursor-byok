@@ -1,6 +1,7 @@
 package forwarder
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -168,20 +169,24 @@ func TestContinuationReminderOnlyAppliesInAgentMode(t *testing.T) {
 
 func TestClassifyContinuationWithoutAction(t *testing.T) {
 	tests := []struct {
-		name              string
-		mode              agentv1.AgentMode
-		latestUserText    string
-		finishReason      string
-		accumulatedText   string
-		reasoning         string
-		hadToolInvocation bool
-		alreadyRecovered  bool
-		hadToolResult     bool
-		want              providerCompletionRecoveryDisposition
+		name               string
+		mode               agentv1.AgentMode
+		latestUserText     string
+		finishReason       string
+		accumulatedText    string
+		reasoning          string
+		hadToolInvocation  bool
+		alreadyRecovered   bool
+		hadToolResult      bool
+		hasIncompleteTodos bool
+		recoveryAttempts   int
+		want               providerCompletionRecoveryDisposition
 	}{
 		{name: "agent continuation progress only", mode: agentv1.AgentMode_AGENT_MODE_AGENT, latestUserText: "继续", finishReason: "completed", accumulatedText: "Now simplify the flow.", reasoning: "Let me fix this.", want: providerCompletionRecoveryResume},
 		{name: "second progress only fails", mode: agentv1.AgentMode_AGENT_MODE_AGENT, latestUserText: "继续", finishReason: "completed", accumulatedText: "I will fix it.", reasoning: "Let me fix this.", alreadyRecovered: true, want: providerCompletionRecoveryFail},
 		{name: "final response after tool result", mode: agentv1.AgentMode_AGENT_MODE_AGENT, latestUserText: "继续", finishReason: "completed", accumulatedText: "Fixed and verified.", reasoning: "Work is complete.", alreadyRecovered: true, hadToolResult: true, want: providerCompletionRecoveryNone},
+		{name: "unfinished todo after tool result resumes", mode: agentv1.AgentMode_AGENT_MODE_AGENT, latestUserText: "继续", finishReason: "completed", accumulatedText: "Now update the login page.", reasoning: "The route is updated.", alreadyRecovered: true, hadToolResult: true, hasIncompleteTodos: true, want: providerCompletionRecoveryResume},
+		{name: "unfinished todo without progress after recovery fails", mode: agentv1.AgentMode_AGENT_MODE_AGENT, latestUserText: "继续", finishReason: "completed", accumulatedText: "Now update the login page.", reasoning: "I should continue.", alreadyRecovered: true, hadToolResult: true, hasIncompleteTodos: true, recoveryAttempts: 1, want: providerCompletionRecoveryFail},
 		{name: "ask mode", mode: agentv1.AgentMode_AGENT_MODE_ASK, latestUserText: "继续", finishReason: "completed", accumulatedText: "More detail.", reasoning: "Continue answer.", want: providerCompletionRecoveryNone},
 		{name: "specific follow up", mode: agentv1.AgentMode_AGENT_MODE_AGENT, latestUserText: "继续解释原因", finishReason: "completed", accumulatedText: "Reason explained.", reasoning: "Explain.", want: providerCompletionRecoveryNone},
 		{name: "tool invoked", mode: agentv1.AgentMode_AGENT_MODE_AGENT, latestUserText: "继续", finishReason: "completed", accumulatedText: "Running tool.", reasoning: "Fix it.", hadToolInvocation: true, want: providerCompletionRecoveryNone},
@@ -190,11 +195,69 @@ func TestClassifyContinuationWithoutAction(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := classifyContinuationWithoutAction(test.mode, test.latestUserText, test.finishReason, test.accumulatedText, test.reasoning, test.hadToolInvocation, test.alreadyRecovered, test.hadToolResult)
+			got := classifyContinuationWithoutAction(test.mode, test.latestUserText, test.finishReason, test.accumulatedText, test.reasoning, test.hadToolInvocation, test.alreadyRecovered, test.hadToolResult, test.hasIncompleteTodos, test.recoveryAttempts)
 			if got != test.want {
 				t.Fatalf("classifyContinuationWithoutAction() = %d, want %d", got, test.want)
 			}
 		})
+	}
+}
+
+func TestConversationHasIncompleteTodos(t *testing.T) {
+	tests := []struct {
+		name  string
+		todos []*agentv1.TodoItem
+		want  bool
+	}{
+		{name: "no todos"},
+		{name: "pending todo", todos: []*agentv1.TodoItem{{Id: "1", Status: agentv1.TodoStatus_TODO_STATUS_PENDING}}, want: true},
+		{name: "in progress todo", todos: []*agentv1.TodoItem{{Id: "1", Status: agentv1.TodoStatus_TODO_STATUS_IN_PROGRESS}}, want: true},
+		{name: "completed and cancelled todos", todos: []*agentv1.TodoItem{
+			{Id: "1", Status: agentv1.TodoStatus_TODO_STATUS_COMPLETED},
+			{Id: "2", Status: agentv1.TodoStatus_TODO_STATUS_CANCELLED},
+		}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := conversationHasIncompleteTodos(&ConversationFile{CurrentTodos: test.todos})
+			if err != nil {
+				t.Fatalf("conversationHasIncompleteTodos() error = %v", err)
+			}
+			if got != test.want {
+				t.Fatalf("conversationHasIncompleteTodos() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestConversationHasIncompleteTodosUsesStructuredCheckpointState(t *testing.T) {
+	payload, err := json.Marshal(runtimeStateEntryPayload{
+		Todos: []*agentv1.TodoItem{{Id: "active", Status: agentv1.TodoStatus_TODO_STATUS_IN_PROGRESS}},
+	})
+	if err != nil {
+		t.Fatalf("marshal runtime state: %v", err)
+	}
+
+	conversation := &ConversationFile{
+		CurrentTodos: []*agentv1.TodoItem{{Id: "stale", Status: agentv1.TodoStatus_TODO_STATUS_COMPLETED}},
+		Entries:      []HistoryEntry{{Seq: 1, Kind: "runtime_state", Payload: payload}},
+	}
+	got, err := conversationHasIncompleteTodos(conversation)
+	if err != nil {
+		t.Fatalf("conversationHasIncompleteTodos() error = %v", err)
+	}
+	if !got {
+		t.Fatal("conversationHasIncompleteTodos() = false, want true for active structured todo")
+	}
+}
+
+func TestContinuationRecoveryAttemptsResetAfterToolInvocation(t *testing.T) {
+	if got := continuationRecoveryAttemptsForProviderDone(1, true); got != 0 {
+		t.Fatalf("continuationRecoveryAttemptsForProviderDone(tool) = %d, want 0", got)
+	}
+	if got := continuationRecoveryAttemptsForProviderDone(1, false); got != 1 {
+		t.Fatalf("continuationRecoveryAttemptsForProviderDone(no tool) = %d, want 1", got)
 	}
 }
 

@@ -1,8 +1,16 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-04（branch `main`，发布目标 v0.0.57）
+> 最后更新：2026-08-04（branch `main`，发布目标 v0.0.58）
 
 ## 已完成的工作
+
+### Fix 16：结构化 Todo 未完成时禁止提前结束（v0.0.58）
+
+- **问题**：v0.0.57 已运行且第一次续跑保护已触发，但请求随后仍在 pass 4 只说“现在更新登录页”便结束
+- **实机证据**：请求 `d5265918-987e-4875-a977-446fcb98d194` 运行到 provider pass 4；Cursor composer 的 Todo 第 6 项“增加 Passkey (WebAuthn) 认证”仍为 `in_progress`，最后 bubble 没有工具调用
+- **根因**：v0.0.57 看到当前 turn 之前已经有工具结果，就把后续文本视为合法最终总结，忽略结构化 Todo 仍有活动项
+- **修复**：完成判定读取 `projectConversationStructuredState`；只要存在 `pending/in_progress` Todo，零工具正常完成必须续跑。每次真实工具调用重置无动作恢复计数；同一恢复窗口再次零工具则以 `continuation_without_action` 失败。全部 Todo 进入 `completed/cancelled` 后才允许总结
+- **验证**：`go test ./...`、`go test -race ./internal/backend/forwarder`、`frontend/yarn build` 通过
 
 ### Fix 15：纯“继续”出现进度文本但零工具时自动续跑（v0.0.57）
 
@@ -11,6 +19,7 @@
 - **根因**：这不是 Token 截断、网络断流或 reasoning-only；v0.0.56 的保护因为存在可见文本而未命中，后端将“方案/进度文本 + 零工具”当作成功完成
 - **修复**：Agent 模式下识别纯续做指令，增加执行提醒；正常完成但有 reasoning、有文本且零工具时注入一次 `continuation_execution_recovery` 并续跑。再次零工具则以 `continuation_without_action` 明确失败；Ask 模式、具体追问、已有工具调用或工具结果后的总结不恢复
 - **验证**：`go test ./...`、`go test -race ./internal/backend/forwarder`、`frontend/yarn build` 通过
+- **实机结果**：v0.0.57 的首次恢复已生效，但因 Todo 第 6 项仍为 `in_progress`，pass 4 仍被错误放行；Fix 16 直接修正完成判定
 
 ### Fix 14：reasoning-only 空完成自动续跑（v0.0.56）
 

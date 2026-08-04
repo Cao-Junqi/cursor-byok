@@ -101,7 +101,7 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | provider stream 中途断开 | `logs/app.log` 中的 `stream failed`、`stream retry`、`stream idle timeout` |
 | 自动更新失败 | `logs/app.log` 中的 `检查更新失败`、`download update` 错误 |
 
-## 最新修复记录（v0.0.57）
+## 最新修复记录（v0.0.58）
 
 | Fix | 文件 | 说明 |
 |-----|------|------|
@@ -116,20 +116,21 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | 13 | `internal/backend/forwarder/actor.go` | v0.0.55：统一识别 `length`、`max_output_tokens`、`max_tokens` 等 provider Token 截断原因 |
 | 14 | `internal/backend/forwarder/actor.go`、`reminders.go` | v0.0.56：reasoning-only 正常完成时注入一次恢复上下文并续跑，重复空完成显式失败 |
 | 15 | `internal/backend/forwarder/actor.go`、`reminders.go` | v0.0.57：纯续做指令遇到“有 reasoning、有进度文本、零工具”的正常完成时，注入一次执行恢复上下文并续跑 |
+| 16 | `internal/backend/forwarder/actor.go`、`types.go` | v0.0.58：结构化 Todo 存在 `pending/in_progress` 时禁止零工具正常完成；按真实工具调用重置恢复计数 |
 
-### v0.0.57 待实机确认
+### v0.0.58 待实机确认
 
-v0.0.56 已确认安装包、Release tag 和运行中二进制一致；最新实机请求证明剩余问题是“有可见进度文本但零工具”的正常完成，不是 Token 截断或旧包。v0.0.57 本地测试已覆盖续做识别、模式边界、恢复上下文去重、重复无动作失败和工具完成后的正常总结，仍需用安装后的 Release 产物复现一次纯“继续”。
+v0.0.57 已确认安装包、Release tag、运行中二进制和首次恢复日志一致；最新实机请求证明剩余问题是“已有工具结果但 Todo 仍未完成时被提前总结”。v0.0.58 本地测试已覆盖结构化 Todo 终态、工具结果后的续跑和恢复计数重置，仍需用安装后的 Release 产物复现一次完整 Todo 未完成场景。
 
 验收标准：
 
-- plist 显示 `0.0.57`
-- 安装目录内真实二进制包含 `C0.0.57`、`continuation_execution_recovery`、`continuation_without_action`、`recovery=resume`
-- 纯“继续”先返回进度文本但零工具时，`app.log` 出现 `continuation without action ... recovery=resume`，随后同一 turn 继续 provider pass 并执行工具
+- plist 显示 `0.0.58`
+- 安装目录内真实二进制包含 `C0.0.58`、`continuation_execution_recovery`、`continuation_without_action`、`in_progress`
+- Todo 仍有活动项时，零工具正常完成不得结束；`app.log` 应出现带 `incomplete_todos=true` 的恢复或明确失败日志
 
 ```bash
 defaults read /Applications/Cursor助手.app/Contents/Info CFBundleShortVersionString
-strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.57|continuation_execution_recovery|continuation_without_action|recovery=resume'
+strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.58|continuation_execution_recovery|continuation_without_action|incomplete_todos'
 ```
 
 ## 约束

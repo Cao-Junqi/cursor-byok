@@ -1,6 +1,16 @@
 # Release Notes
 
-## [Unreleased] — v0.0.57
+## [Unreleased] — v0.0.58
+
+### fix: 未完成 Todo 时禁止提前结束 Agent 轮次
+
+**症状**：v0.0.57 已安装且 `continuation_execution_recovery` 确实触发，但同一请求在后续 pass 仍可能只输出“现在更新登录页”便结束。
+**实机证据**：请求 `d5265918-987e-4875-a977-446fcb98d194` 在 v0.0.57 下运行到 provider pass 4；Cursor 保存的结构化 Todo 中第 6 项“增加 Passkey (WebAuthn) 认证”仍为 `in_progress`，最后一个 bubble 没有工具调用。
+**根因**：v0.0.57 只用“本轮之前是否有过工具结果”判断是否可以总结；只要前面成功写过一个文件，后续“下一步还没执行”的文本也会被误判为最终答复。
+**修复**：Agent 纯续做请求的完成判定接入结构化 Todo。只要仍有 `pending` 或 `in_progress` 项，即使之前有工具结果，当前无工具的正常完成也必须续跑；每次真实工具调用会重置无动作恢复计数，连续再次无工具则明确失败，避免无限循环。Todo 全部 `completed/cancelled` 后才允许总结。
+**验证**：覆盖未完成 Todo、有工具结果后的续跑、重复无动作失败、工具调用后的计数重置以及终态 Todo 的正常完成；完整 Go 测试、forwarder race test 与前端生产构建通过。
+
+## v0.0.57
 
 ### fix: “继续”不再只描述下一步便结束
 
