@@ -1,6 +1,16 @@
 # Release Notes
 
-## [Unreleased] — v0.0.56
+## [Unreleased] — v0.0.57
+
+### fix: “继续”不再只描述下一步便结束
+
+**症状**：安装 v0.0.56 后，Agent 收到“继续”仍可能在数秒内结束，留下类似“简化成只走一次验证”的方案描述，却没有执行任何工具。
+**实机证据**：请求 `0ec77905-4798-476d-ac3b-25dcafa0e404` 在约 7 秒内以正常完成结束，`input_tokens=88175`、`output_tokens=355`；该 pass 同时产生 reasoning 和可见文本，但工具调用数为 0。因此这次不是 Token 截断、超时或 reasoning-only 空完成。
+**根因**：v0.0.56 只恢复“有 reasoning、无文本、无工具”的完成；一旦模型输出了进度或方案文本，后端便把它当作正常最终答复。
+**修复**：在 Agent 模式识别纯“继续/接着做/continue”等续做指令，明确要求执行未完成工作；若正常完成时仍只有 reasoning 和可见文本而没有工具调用，写入一次 `continuation_execution_recovery` 上下文并续跑。恢复后仍拒绝执行则以 `continuation_without_action` 明确失败，避免无限循环或伪装完成；Ask 模式、具体追问和已经产生工具结果的最终总结不受影响。
+**验证**：覆盖续做指令边界、Agent/Ask 模式、首次恢复、重复无动作失败、已有工具调用和工具结果后的正常完成；完整 Go 测试、forwarder race test 与前端生产构建通过。
+
+## v0.0.56
 
 ### fix: 仅产生内部推理时继续当前任务
 

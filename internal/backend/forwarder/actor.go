@@ -698,6 +698,8 @@ func (service *Service) handleProviderDoneEvent(stream *ActiveStream, payload *s
 	hadToolInvocation := stream.ToolInvocationCount > 0
 	terminalToolInvocation := stream.ProviderTerminalToolInvocation
 	existingCompletion := stream.PendingProviderCompletion
+	mode := stream.Mode
+	latestUserText := stream.LatestUserText
 	stream.ProviderActive = false
 	stream.ProviderCancel = nil
 	stream.PendingProviderAction = providerActionNone
@@ -797,6 +799,13 @@ func (service *Service) handleProviderDoneEvent(stream *ActiveStream, payload *s
 		if handled {
 			return nil
 		}
+		handled, err = service.handleContinuationWithoutAction(stream, conversationID, turnSeq, requestID, modelCallID, mode, latestUserText, finishReason, accumulatedText, accumulatedReasoning, hadToolInvocation)
+		if err != nil {
+			return service.failStreamIfNonTerminal(stream, "unknown", err)
+		}
+		if handled {
+			return nil
+		}
 	}
 
 	if existingCompletion != nil {
@@ -890,33 +899,40 @@ func tokenLimitRecoveryText() string {
 	return "The previous provider pass reached its output token limit and may have stopped mid-sentence or during an incomplete tool call. Continue the current user task from the preserved conversation state. Do not repeat completed work. If an intended tool call did not complete, issue a new complete tool call."
 }
 
-type emptyCompletionRecoveryDisposition uint8
+type providerCompletionRecoveryDisposition uint8
 
 const (
-	emptyCompletionRecoveryNone emptyCompletionRecoveryDisposition = iota
-	emptyCompletionRecoveryResume
-	emptyCompletionRecoveryFail
+	providerCompletionRecoveryNone providerCompletionRecoveryDisposition = iota
+	providerCompletionRecoveryResume
+	providerCompletionRecoveryFail
 )
 
-func classifyEmptyProviderCompletion(finishReason string, accumulatedText string, accumulatedReasoning string, hadToolInvocation bool, alreadyRecovered bool) emptyCompletionRecoveryDisposition {
+func classifyEmptyProviderCompletion(finishReason string, accumulatedText string, accumulatedReasoning string, hadToolInvocation bool, alreadyRecovered bool) providerCompletionRecoveryDisposition {
 	if hadToolInvocation || strings.TrimSpace(accumulatedText) != "" || strings.TrimSpace(accumulatedReasoning) == "" {
-		return emptyCompletionRecoveryNone
+		return providerCompletionRecoveryNone
 	}
+	if !isNormalProviderCompletionFinishReason(finishReason) {
+		return providerCompletionRecoveryNone
+	}
+	if alreadyRecovered {
+		return providerCompletionRecoveryFail
+	}
+	return providerCompletionRecoveryResume
+}
+
+func isNormalProviderCompletionFinishReason(finishReason string) bool {
 	switch strings.ToLower(strings.TrimSpace(finishReason)) {
 	case "completed", "stop", "message_stop", "end_turn":
-		if alreadyRecovered {
-			return emptyCompletionRecoveryFail
-		}
-		return emptyCompletionRecoveryResume
+		return true
 	default:
-		return emptyCompletionRecoveryNone
+		return false
 	}
 }
 
 const emptyCompletionErrorText = "provider returned reasoning without visible response or tool invocation after recovery"
 
 func (service *Service) handleEmptyProviderCompletion(stream *ActiveStream, conversationID string, turnSeq int64, requestID string, modelCallID string, finishReason string, accumulatedText string, accumulatedReasoning string, hadToolInvocation bool) (bool, error) {
-	if classifyEmptyProviderCompletion(finishReason, accumulatedText, accumulatedReasoning, hadToolInvocation, false) == emptyCompletionRecoveryNone {
+	if classifyEmptyProviderCompletion(finishReason, accumulatedText, accumulatedReasoning, hadToolInvocation, false) == providerCompletionRecoveryNone {
 		return false, nil
 	}
 	conversation, _, _, err := service.snapshotCheckpointConversation(stream)
@@ -925,12 +941,12 @@ func (service *Service) handleEmptyProviderCompletion(stream *ActiveStream, conv
 	}
 	alreadyRecovered := currentTurnHasPromptContextSource(conversation, turnSeq, promptContextSourceEmptyCompletionRecovery)
 	switch classifyEmptyProviderCompletion(finishReason, accumulatedText, accumulatedReasoning, hadToolInvocation, alreadyRecovered) {
-	case emptyCompletionRecoveryFail:
+	case providerCompletionRecoveryFail:
 		log.Printf("forwarder empty completion request_id=%s provider_pass=%d finish_reason=%s recovery=failed",
 			strings.TrimSpace(requestID), currentProviderPass(stream), strings.TrimSpace(finishReason))
 		service.setTurnPhase(stream, TurnPhaseFailed)
 		return true, service.failStream(stream, "empty_response", errors.New(emptyCompletionErrorText))
-	case emptyCompletionRecoveryResume:
+	case providerCompletionRecoveryResume:
 		if currentProviderPass(stream) >= maxProviderPassesPerTurn {
 			service.setTurnPhase(stream, TurnPhaseFailed)
 			return true, service.failStream(stream, "max_provider_passes_exceeded",
@@ -973,6 +989,85 @@ func (service *Service) appendEmptyCompletionRecoveryContext(stream *ActiveStrea
 
 func emptyCompletionRecoveryText() string {
 	return "The previous provider pass produced only internal reasoning and did not complete its planned tool call or provide a user-visible response. Continue the current task. If the reasoning planned a tool call, issue the complete tool call now; otherwise provide the final answer."
+}
+
+func classifyContinuationWithoutAction(mode agentv1.AgentMode, latestUserText string, finishReason string, accumulatedText string, accumulatedReasoning string, hadToolInvocation bool, alreadyRecovered bool, hadToolResult bool) providerCompletionRecoveryDisposition {
+	if normalizeMode(mode) != agentv1.AgentMode_AGENT_MODE_AGENT || !isBareContinuationRequest(latestUserText) || hadToolInvocation {
+		return providerCompletionRecoveryNone
+	}
+	if strings.TrimSpace(accumulatedText) == "" || strings.TrimSpace(accumulatedReasoning) == "" || !isNormalProviderCompletionFinishReason(finishReason) {
+		return providerCompletionRecoveryNone
+	}
+	if alreadyRecovered {
+		if hadToolResult {
+			return providerCompletionRecoveryNone
+		}
+		return providerCompletionRecoveryFail
+	}
+	return providerCompletionRecoveryResume
+}
+
+const continuationWithoutActionErrorText = "provider described unfinished work without executing a tool after continuation recovery"
+
+func (service *Service) handleContinuationWithoutAction(stream *ActiveStream, conversationID string, turnSeq int64, requestID string, modelCallID string, mode agentv1.AgentMode, latestUserText string, finishReason string, accumulatedText string, accumulatedReasoning string, hadToolInvocation bool) (bool, error) {
+	if classifyContinuationWithoutAction(mode, latestUserText, finishReason, accumulatedText, accumulatedReasoning, hadToolInvocation, false, false) == providerCompletionRecoveryNone {
+		return false, nil
+	}
+	conversation, _, _, err := service.snapshotCheckpointConversation(stream)
+	if err != nil {
+		return true, err
+	}
+	alreadyRecovered := currentTurnHasPromptContextSource(conversation, turnSeq, promptContextSourceContinuationRecovery)
+	hadToolResult := currentTurnHasToolResult(conversation, turnSeq)
+	switch classifyContinuationWithoutAction(mode, latestUserText, finishReason, accumulatedText, accumulatedReasoning, hadToolInvocation, alreadyRecovered, hadToolResult) {
+	case providerCompletionRecoveryFail:
+		log.Printf("forwarder continuation without action request_id=%s provider_pass=%d finish_reason=%s recovery=failed",
+			strings.TrimSpace(requestID), currentProviderPass(stream), strings.TrimSpace(finishReason))
+		service.setTurnPhase(stream, TurnPhaseFailed)
+		return true, service.failStream(stream, "continuation_without_action", errors.New(continuationWithoutActionErrorText))
+	case providerCompletionRecoveryResume:
+		if currentProviderPass(stream) >= maxProviderPassesPerTurn {
+			service.setTurnPhase(stream, TurnPhaseFailed)
+			return true, service.failStream(stream, "max_provider_passes_exceeded",
+				fmt.Errorf("provider pass limit reached (%d); possible infinite continuation loop", maxProviderPassesPerTurn))
+		}
+	default:
+		return false, nil
+	}
+	if err := service.appendContinuationRecoveryContext(stream, conversationID, turnSeq, requestID); err != nil {
+		return true, err
+	}
+	if err := service.syncSummaryCarryForward(conversationID, requestID, modelCallID); err != nil {
+		return true, err
+	}
+	log.Printf("forwarder continuation without action request_id=%s provider_pass=%d finish_reason=%s recovery=resume",
+		strings.TrimSpace(requestID), currentProviderPass(stream), strings.TrimSpace(finishReason))
+	if err := service.publishCheckpoint(requestID, conversationID); err != nil {
+		return true, err
+	}
+	if err := service.requestProviderAction(stream, providerActionResume); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+func (service *Service) appendContinuationRecoveryContext(stream *ActiveStream, conversationID string, turnSeq int64, requestID string) error {
+	conversation, _, _, err := service.snapshotCheckpointConversation(stream)
+	if err != nil {
+		return err
+	}
+	if currentTurnHasPromptContextSource(conversation, turnSeq, promptContextSourceContinuationRecovery) {
+		return nil
+	}
+	context := newPromptContextReminder(promptContextSourceContinuationRecovery, continuationRecoveryText())
+	_, err = service.appendConversationEntries(stream, conversationID, []HistoryEntry{
+		newPromptContextEntry(turnSeq, requestID, context),
+	})
+	return err
+}
+
+func continuationRecoveryText() string {
+	return "The user asked to continue unfinished work. The previous provider pass described work it intended to do but did not execute any tool. Continue the existing task now: perform the next concrete action with an available tool instead of giving another progress-only message. Only provide a final answer after the actionable work is complete and verified."
 }
 
 const subagentEmptyStopErrorText = "subagent returned empty response after tool result"

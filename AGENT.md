@@ -101,7 +101,7 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | provider stream 中途断开 | `logs/app.log` 中的 `stream failed`、`stream retry`、`stream idle timeout` |
 | 自动更新失败 | `logs/app.log` 中的 `检查更新失败`、`download update` 错误 |
 
-## 最新修复记录（v0.0.56）
+## 最新修复记录（v0.0.57）
 
 | Fix | 文件 | 说明 |
 |-----|------|------|
@@ -115,20 +115,21 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | 12 | `.github/workflows/build-macos.yml` | 修正资产下载路径，并将 Release tag 显式绑定实际构建 SHA |
 | 13 | `internal/backend/forwarder/actor.go` | v0.0.55：统一识别 `length`、`max_output_tokens`、`max_tokens` 等 provider Token 截断原因 |
 | 14 | `internal/backend/forwarder/actor.go`、`reminders.go` | v0.0.56：reasoning-only 正常完成时注入一次恢复上下文并续跑，重复空完成显式失败 |
+| 15 | `internal/backend/forwarder/actor.go`、`reminders.go` | v0.0.57：纯续做指令遇到“有 reasoning、有进度文本、零工具”的正常完成时，注入一次执行恢复上下文并续跑 |
 
-### v0.0.56 待实机确认
+### v0.0.57 待实机确认
 
-本地测试已覆盖 reasoning-only 空完成的续跑判断、恢复上下文去重和重复失败，但仍需用安装后的 Release 产物复现一次真实 provider 空完成。
+v0.0.56 已确认安装包、Release tag 和运行中二进制一致；最新实机请求证明剩余问题是“有可见进度文本但零工具”的正常完成，不是 Token 截断或旧包。v0.0.57 本地测试已覆盖续做识别、模式边界、恢复上下文去重、重复无动作失败和工具完成后的正常总结，仍需用安装后的 Release 产物复现一次纯“继续”。
 
 验收标准：
 
-- plist 显示 `0.0.56`
-- 安装目录内真实二进制包含 `C0.0.56`、`empty_completion_recovery`、`recovery=resume`、`empty_response`
-- reasoning-only 正常完成时 `app.log` 出现 `recovery=resume`，随后同一 turn 继续 provider pass
+- plist 显示 `0.0.57`
+- 安装目录内真实二进制包含 `C0.0.57`、`continuation_execution_recovery`、`continuation_without_action`、`recovery=resume`
+- 纯“继续”先返回进度文本但零工具时，`app.log` 出现 `continuation without action ... recovery=resume`，随后同一 turn 继续 provider pass 并执行工具
 
 ```bash
 defaults read /Applications/Cursor助手.app/Contents/Info CFBundleShortVersionString
-strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.56|empty_completion_recovery|recovery=resume|empty_response'
+strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.57|continuation_execution_recovery|continuation_without_action|recovery=resume'
 ```
 
 ## 约束

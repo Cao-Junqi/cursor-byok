@@ -25,6 +25,7 @@ const (
 	promptContextSourceSubagentEmptyStopRecovery = "subagent_empty_stop_recovery"
 	promptContextSourceTokenLimitRecovery        = "token_limit_recovery"
 	promptContextSourceEmptyCompletionRecovery   = "empty_completion_recovery"
+	promptContextSourceContinuationRecovery      = "continuation_execution_recovery"
 	promptContextSourceDebugModeReminder         = "debug_mode_reminder"
 )
 
@@ -74,6 +75,9 @@ func (injector *DefaultReminderInjector) Inject(mode agentv1.AgentMode, conversa
 	default:
 		reminders = append(reminders, "You are in agent mode. Use the available tools when they materially improve correctness or efficiency.")
 		reminders = append(reminders, "When reporting progress or completion, lead with the result, mention only key changes or verification, and avoid long recaps, exhaustive lists, or unsolicited example code.")
+		if isBareContinuationRequest(latestUserText) {
+			reminders = append(reminders, "The user's short continuation message means resume unfinished work from the prior conversation. Do not stop after only describing a next step or progress. Perform the next concrete action with the available tools. Only finish when no actionable work remains, then report completed work and verification.")
+		}
 	}
 
 	result := PromptReminders{
@@ -145,6 +149,17 @@ func latestUserIntentReminderText(latestUserText string) string {
 		return "Prefer clear staged plans with concrete checkpoints."
 	default:
 		return ""
+	}
+}
+
+func isBareContinuationRequest(text string) bool {
+	normalized := strings.ToLower(strings.Trim(strings.TrimSpace(text), ".!?。！？,，;；:："))
+	switch normalized {
+	case "继续", "继续吧", "接着", "接着做", "继续处理", "继续执行", "继续完成",
+		"continue", "continue please", "please continue", "go on", "proceed", "resume", "keep going":
+		return true
+	default:
+		return false
 	}
 }
 

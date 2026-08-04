@@ -1,8 +1,16 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-04（branch `main`，发布目标 v0.0.56）
+> 最后更新：2026-08-04（branch `main`，发布目标 v0.0.57）
 
 ## 已完成的工作
+
+### Fix 15：纯“继续”出现进度文本但零工具时自动续跑（v0.0.57）
+
+- **问题**：v0.0.56 已安装并生效后，用户发送“继续”，Agent 仍在约 7 秒后只返回 Passkey 简化方案，没有修改代码
+- **实机证据**：请求 `0ec77905-4798-476d-ac3b-25dcafa0e404` 正常完成，`input_tokens=88175`、`output_tokens=355`；同时存在 reasoning 和可见文本，但 `provider_pass=1` 没有工具调用
+- **根因**：这不是 Token 截断、网络断流或 reasoning-only；v0.0.56 的保护因为存在可见文本而未命中，后端将“方案/进度文本 + 零工具”当作成功完成
+- **修复**：Agent 模式下识别纯续做指令，增加执行提醒；正常完成但有 reasoning、有文本且零工具时注入一次 `continuation_execution_recovery` 并续跑。再次零工具则以 `continuation_without_action` 明确失败；Ask 模式、具体追问、已有工具调用或工具结果后的总结不恢复
+- **验证**：`go test ./...`、`go test -race ./internal/backend/forwarder`、`frontend/yarn build` 通过
 
 ### Fix 14：reasoning-only 空完成自动续跑（v0.0.56）
 
@@ -11,6 +19,7 @@
 - **根因**：后端只恢复 Token 上限和子 Agent 工具结果后的空结束，没有处理主 Agent 的 reasoning-only 正常完成
 - **修复**：对 `completed`、`stop`、`message_stop`、`end_turn` 下“无文本、无工具、有 reasoning”的结果注入一次 `empty_completion_recovery` 并续跑；第二次仍为空时显式 `empty_response` 失败，继续受 50 pass 上限保护
 - **验证**：`go test ./...`、`go test -race ./internal/backend/forwarder`、`frontend/yarn build` 通过
+- **发布确认**：GitHub Release 与安装后的真实二进制均为提交 `47fac625d783c1a407e0646068a6c8f434150a61`；安装包包含 v0.0.56 的恢复标记。本次新现象属于 Fix 15，不是安装到旧代码
 
 ### Fix 11：输出 Token 截断后可靠自动续跑（v0.0.55）
 
