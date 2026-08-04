@@ -1,12 +1,18 @@
 # Release Notes
 
-## [Unreleased] — feat/auto-continue — v0.0.52
+## [Unreleased] — v0.0.53
 
-### feat: 支持大模型输出截断（finish_reason=length）后自动触发无感续写
+### fix: 输出 Token 截断后可靠自动续跑
 
 **症状**：使用 deepseek-v4 等高 reasoningEffort 模型，在输出大量内容或多次调用工具后，模型突然停止，Loading 图标变为发送箭头，且应用内没有任何错误提示。
-**根因**：模型因为达到 output tokens 上限导致 `finish_reason=length`，导致发给 Cursor 的 `tool_call` JSON 不完整。旧逻辑中，若在 `length` 前有过 tool call（`hadToolInvocation == true`），则会错误地将连接标记为正常结束。Cursor 收到不完整的 JSON 后直接丢弃，导致模型调用被迫静默中止。
-**修复**：在 `actor.go` 中，移除了针对 `hadToolInvocation` 的放行判断，只要遇到 `finish_reason=length`，一律向前端抛出红色的 `max_tokens_exceeded` 错误。从此可以明确看到是因为模型 Token 耗尽而结束，打破无征兆中断的现象。
+**根因**：`v0.0.52` 用不存在的 `run_terminal_cmd` 工具模拟续跑，但后续状态判断仍读取注入前的 `hadToolInvocation`。无真实工具完成时，`length` 最终仍被当成成功结束，自动续跑没有发生。
+**修复**：`finish_reason=length` 时保存已生成内容，并通过内部恢复上下文直接启动下一次 provider pass；不再伪造客户端工具调用。已完成的真实工具仍按原流程等待结果，终止型工具不会被强制续跑，50 pass 上限继续防止无限循环。
+**验证**：新增续跑决策与恢复上下文去重测试；完整 Go 测试、forwarder race test 和前端生产构建均通过。
+
+### fix: 自动更新清单使用正确的 Release 下载地址
+
+**问题**：`update.json` 使用不存在的 GitHub `/downloads/` 路径，可能出现检测到新版本但下载不到对应安装包。
+**修复**：平台资产 URL 改为 GitHub Release 的 `/releases/download/v<version>/...` 格式。
 
 ### fix: 修复外接非 Retina 显示器时界面滑动模糊的问题
 

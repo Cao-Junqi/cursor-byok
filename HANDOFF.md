@@ -1,8 +1,16 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-03（commit `484f563`，branch `fix/perf-leaks`，v0.0.45）
+> 最后更新：2026-08-04（branch `main`，发布目标 v0.0.53）
 
 ## 已完成的工作
+
+### Fix 11：输出 Token 截断后可靠自动续跑（v0.0.53）
+
+- **问题**：`v0.0.52` 遇到 `finish_reason=length` 后仍会频繁结束当前 turn，看起来像自动续跑没有生效
+- **根因**：旧实现注入不存在的 `run_terminal_cmd` 工具模拟续跑，但后续判断仍读取注入前的 `hadToolInvocation`；没有真实工具完成时，当前 turn 仍被当成正常结束
+- **修复**：保留已生成的 assistant 内容，写入去重的 `token_limit_recovery` 上下文，并直接安排下一次 provider pass；真实工具结果、终止型工具和 50 pass 上限继续沿用原逻辑
+- **测试**：新增 `actor_token_limit_test.go`，覆盖续跑判断和同一 turn 的恢复上下文去重；`go test ./...` 与 `go test -race ./internal/backend/forwarder` 通过
+- **发布修复**：`update.json` 中的下载地址改为 GitHub Release 实际使用的 `/releases/download/` 路径，避免“检测到最新版但安装不到对应产物”
 
 ### Fix 1：Anthropic 批量导入 baseURL + 模型名可编辑（`33079da`）
 
@@ -43,11 +51,11 @@
   - `internal/backend/forwarder/actor.go`：在循环继续条件前检查 pass 数，超限则 `failStream("max_provider_passes_exceeded")`
 - **状态**：已推送到 `fix/perf-leaks`
 
-### Fix 5：`finish_reason=length` 静默中止（`fc567f7`）
+### Fix 5：`finish_reason=length` 静默中止的初步处理（`fc567f7`，v0.0.41）
 
 - **问题**：使用 arkcoding deepseek-v4（`reasoningEffort: max`）时，agent 在 ~21 pass 后无任何错误日志，直接停止。最后响应"现在运行测试"，但 tool call 未执行
 - **根因**：deepseek-v4 每 pass 消耗大量 reasoning tokens（max effort），经 21 pass 后输出 token 预算耗尽 → `finish_reason=length` → tool call 被截断。后端把 `length` 当作正常 `stop` 处理，静默完成 turn，日志无任何错误，调用方看不到任何提示
-- **修复**：`internal/backend/forwarder/actor.go` `handleProviderDoneEvent`：检测 `finish_reason=length && !hadToolInvocation` 时显式 `failStream("max_tokens_exceeded")` 并打印日志，用户在 Cursor 中看到明确错误
+- **历史处理**：检测 `finish_reason=length && !hadToolInvocation` 时显式 `failStream("max_tokens_exceeded")`，只解决静默中止；自动续跑由 v0.0.53 的 Fix 11 完整实现
 - **版本**：`0.0.40` → `0.0.41`
 - **状态**：已推送到 `fix/perf-leaks`
 
@@ -107,17 +115,14 @@
 - **无法在代码层简单修复**：不加标签的推理内容与正常回复文本无法可靠区分，需要上游代理修复输出格式
 - **缓解方案**（可选）：对接使用 `reasoning_content` 字段的代理（已在 `openai.go:562` 支持），或换用支持 Anthropic 原生 thinking block 的端点
 
-```
-branch: fix/perf-leaks
-commits ahead of main: 多个（包含性能修复批次 + 上述三个 fix）
-最新 commit: 4bf92f7
-```
+当前开发分支为 `main`，发布目标为 `v0.0.53`。
 
 ## 待办 / 未决问题
 
-1. **`fix/perf-leaks` → `main` 的 PR**：所有修复都在这个分支，等 GitHub Actions 构建通过后可以发 PR 合并。
-2. **`api2.cursor.sh` 上的非 AI 路径**：日志里偶尔出现 `api2.cursor.sh:443 remote error: tls: unknown certificate`，这些是 api2 上的非推理路径（如 feature flag 拉取）。目前 AI 推理正常工作，这些错误不影响功能，但如果以后 api2 的非 AI 路径也出问题，可以考虑对特定 path 做 bypass（需要先 MITM 再按路径判断，或改成 api2 仅对已知 AI 路径做 MITM）。
-3. **前端测试**：Fix 1/2 的前端改动没有自动化测试覆盖，建议人工验证批量导入和分组展示功能。
+1. **v0.0.53 实机验证**：安装 GitHub Release 后，按下方命令同时核对 plist 和二进制；不能只相信应用界面显示的版本号。
+2. **Token 截断实测**：遇到真实截断时，日志应出现 `finish_reason=length resume=true`，随后同一 turn 启动下一次 provider pass。
+3. **`api2.cursor.sh` 上的非 AI 路径**：日志里偶尔出现 `api2.cursor.sh:443 remote error: tls: unknown certificate`，这些是 api2 上的非推理路径（如 feature flag 拉取）。目前 AI 推理正常工作，这些错误不影响功能，但如果以后 api2 的非 AI 路径也出问题，可以考虑对特定 path 做 bypass（需要先 MITM 再按路径判断，或改成 api2 仅对已知 AI 路径做 MITM）。
+4. **前端测试**：Fix 1/2 的前端改动没有自动化测试覆盖，建议人工验证批量导入和分组展示功能。
 
 ## 关键诊断命令
 
@@ -134,6 +139,13 @@ cat ~/.cursor-local-assistant-v2/config.yaml
 
 # 验证 Cursor HTTP proxy 设置
 grep -E "proxy|disableHttp2" ~/Library/Application\ Support/Cursor/User/settings.json
+
+# 安装 v0.0.53 后同时核对 bundle 元数据和真实二进制
+defaults read /Applications/Cursor助手.app/Contents/Info CFBundleShortVersionString
+strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.53|token_limit_recovery|finish_reason=length resume='
+
+# 与 GitHub Release 资产核对（先下载对应架构的 tar.gz）
+shasum -a 256 cursor-byok-0.0.53-macos-arm64.tar.gz
 ```
 
 ## 重要约束（接手时必读）

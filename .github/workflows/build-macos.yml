@@ -94,7 +94,7 @@ jobs:
             fi
             CS=$(shasum -a 256 "$ASSET" | cut -d' ' -f1)
             SZ=$(stat -f%z "$ASSET")
-            URL="https://github.com/${REPO}/downloads/v${VER}/cursor-byok-${VER}-${PLATFORM}${SUF}"
+            URL="https://github.com/${REPO}/releases/download/v${VER}/cursor-byok-${VER}-${PLATFORM}${SUF}"
             if [ "$FIRST" = false ]; then echo ',' >> "$TMPFILE"; fi
             echo "    \"${PLATFORM}\": {" >> "$TMPFILE"
             echo "      \"url\": \"${URL}\"," >> "$TMPFILE"

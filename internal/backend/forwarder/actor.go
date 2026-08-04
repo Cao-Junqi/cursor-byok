@@ -731,23 +731,19 @@ func (service *Service) handleProviderDoneEvent(stream *ActiveStream, payload *s
 	if err := service.flushAssistantText(stream, conversationID, turnSeq, requestID, accumulatedText, accumulatedReasoning, accumulatedReasoningSignature, accumulatedReasoningSignatureSource, accumulatedReasoningItemID, accumulatedReasoningStatus, accumulatedReasoningSummary, !hadToolInvocation); err != nil {
 		return service.failStreamIfNonTerminal(stream, "unknown", err)
 	}
-	// ponytail: finish_reason=length means the model hit its output token budget mid-generation.
-	// With heavy reasoning models (e.g. deepseek-v4 reasoningEffort=max), tool calls can be
-	// silently truncated, leaving the turn appearing to complete normally.
-	// To prevent the autonomous agent loop from stalling out, we inject a synthetic tool call
-	// to notify the model that it was truncated, which forces the agent loop to continue.
+	// finish_reason=length means the provider hit its output budget mid-generation.
+	// A truncated tool call cannot be safely replayed, so preserve the partial assistant
+	// output and resume from an internal prompt context instead of inventing a client tool.
+	resumeAfterLength := false
 	if strings.EqualFold(strings.TrimSpace(finishReason), "length") {
-		log.Printf("forwarder max_tokens_exceeded request_id=%s provider_pass=%d finish_reason=length; injecting auto-continue tool",
-			strings.TrimSpace(requestID), currentProviderPass(stream))
+		resumeAfterLength = !terminalToolInvocation
+		log.Printf("forwarder max_tokens_exceeded request_id=%s provider_pass=%d finish_reason=length resume=%t",
+			strings.TrimSpace(requestID), currentProviderPass(stream), resumeAfterLength)
 
-		fakeInvocation := runtimecore.ToolInvocation{
-			CallID:      fmt.Sprintf("call_continue_%d", time.Now().UnixNano()),
-			ToolName:    "run_terminal_cmd",
-			ArgsJSON:    []byte(`{"command": "echo '[Notice] The previous output was truncated due to max_tokens limit. Please continue your task from where you left off.'"}`),
-			ModelCallID: modelCallID,
-		}
-		if err := service.handleToolInvocation(stream, fakeInvocation); err != nil {
-			log.Printf("failed to inject auto-continue tool: %v", err)
+		if resumeAfterLength && !hadToolInvocation {
+			if err := service.appendTokenLimitRecoveryContext(stream, conversationID, turnSeq, requestID); err != nil {
+				return service.failStreamIfNonTerminal(stream, "unknown", err)
+			}
 		}
 	}
 	if err := service.recordTurnUsageSnapshot(stream, conversationID, turnSeq, requestID, modelCallID, "completed", usage, "", false); err != nil {
@@ -819,7 +815,7 @@ func (service *Service) handleProviderDoneEvent(stream *ActiveStream, payload *s
 		return nil
 	}
 
-	if (hadToolInvocation || shouldResumeAfterToolResults(finishReason)) && !terminalToolInvocation {
+	if shouldResumeProviderAfterDone(finishReason, hadToolInvocation, terminalToolInvocation) {
 		if currentProviderPass(stream) >= maxProviderPassesPerTurn {
 			service.setTurnPhase(stream, TurnPhaseFailed)
 			return service.failStream(stream, "max_provider_passes_exceeded",
@@ -846,6 +842,34 @@ func (service *Service) handleProviderDoneEvent(stream *ActiveStream, payload *s
 		return service.failStreamIfNonTerminal(stream, "unknown", err)
 	}
 	return nil
+}
+
+func shouldResumeProviderAfterDone(finishReason string, hadToolInvocation bool, terminalToolInvocation bool) bool {
+	if terminalToolInvocation {
+		return false
+	}
+	return hadToolInvocation ||
+		shouldResumeAfterToolResults(finishReason) ||
+		strings.EqualFold(strings.TrimSpace(finishReason), "length")
+}
+
+func (service *Service) appendTokenLimitRecoveryContext(stream *ActiveStream, conversationID string, turnSeq int64, requestID string) error {
+	conversation, _, _, err := service.snapshotCheckpointConversation(stream)
+	if err != nil {
+		return err
+	}
+	if currentTurnHasPromptContextSource(conversation, turnSeq, promptContextSourceTokenLimitRecovery) {
+		return nil
+	}
+	context := newPromptContextReminder(promptContextSourceTokenLimitRecovery, tokenLimitRecoveryText())
+	_, err = service.appendConversationEntries(stream, conversationID, []HistoryEntry{
+		newPromptContextEntry(turnSeq, requestID, context),
+	})
+	return err
+}
+
+func tokenLimitRecoveryText() string {
+	return "The previous provider pass reached its output token limit and may have stopped mid-sentence or during an incomplete tool call. Continue the current user task from the preserved conversation state. Do not repeat completed work. If an intended tool call did not complete, issue a new complete tool call."
 }
 
 const subagentEmptyStopErrorText = "subagent returned empty response after tool result"

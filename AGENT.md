@@ -101,26 +101,33 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | provider stream 中途断开 | `logs/app.log` 中的 `stream failed`、`stream retry`、`stream idle timeout` |
 | 自动更新失败 | `logs/app.log` 中的 `检查更新失败`、`download update` 错误 |
 
-## 最新修复记录（v0.0.45）
+## 最新修复记录（v0.0.53）
 
 | Fix | 文件 | 说明 |
 |-----|------|------|
-| 5 | `internal/backend/forwarder/actor.go` | `finish_reason=length && !hadToolInvocation` 时显式 failStream |
+| 5 | `internal/backend/forwarder/actor.go` | v0.0.41 初步处理：`finish_reason=length` 时显式 failStream |
 | 6 | `internal/backend/forwarder/service.go` | failStream 加 log.Printf |
 | 7 | `internal/netproxy/netproxy.go` | cloneDefaultTransport 加 ResponseHeaderTimeout=60s |
 | 8 | `internal/backend/forwarder/service.go` | runProviderStream 零事件失败透明重试（3次退避） |
 | 9 | `internal/backend/forwarder/service.go` | runProviderStream 60s idle watchdog |
 | 10 | `.github/workflows/build-macos.yml` | 推送到 main 自动编译 + 发布 Release（macOS+Windows） |
+| 11 | `internal/backend/forwarder/actor.go`、`reminders.go` | v0.0.53：保留截断输出，写入去重恢复上下文并直接续跑 provider pass |
+| 12 | `.github/workflows/build-macos.yml` | 修正 `update.json` 的 GitHub Release 资产下载路径 |
 
-### 未解决：Session 中断（v0.0.45 仍存在）
+### v0.0.53 待实机确认
 
-使用 LongCat-2.0（reasoningEffort=xhigh）时，pass 11 中途模型停止输出，日志无任何错误。
+本地测试已覆盖 `finish_reason=length` 的续跑判断和恢复上下文去重，但仍需用安装后的 Release 产物触发一次真实 token 截断。
 
-**已排除**：上游 SLA 99.99%（用户确认）、不用 proxy 稳定（用户确认）、Fix 5/6/7/8/9 已生效但问题仍存在。
+验收标准：
 
-**待验证**：
-- 抓包确认是谁先断开 SSE 连接（Cursor 客户端 vs 上游）
-- Cursor 结构化日志（`~/Library/Logs/Cursor/`）中的断开错误信息
+- plist 显示 `0.0.53`
+- 安装目录内真实二进制包含 `C0.0.53`、`token_limit_recovery`、`finish_reason=length resume=`
+- 真实截断时 `app.log` 出现 `finish_reason=length resume=true`，随后同一 turn 继续 provider pass
+
+```bash
+defaults read /Applications/Cursor助手.app/Contents/Info CFBundleShortVersionString
+strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.53|token_limit_recovery|finish_reason=length resume='
+```
 
 ## 约束
 
