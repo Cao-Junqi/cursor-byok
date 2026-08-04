@@ -15,6 +15,9 @@ func TestShouldResumeProviderAfterDone(t *testing.T) {
 		{name: "provider tool reason", finishReason: "tool_calls", want: true},
 		{name: "token limit", finishReason: "length", want: true},
 		{name: "normalized token limit", finishReason: " LENGTH ", want: true},
+		{name: "responses token limit", finishReason: "max_output_tokens", want: true},
+		{name: "anthropic token limit", finishReason: "max_tokens", want: true},
+		{name: "incomplete response", finishReason: "incomplete", want: true},
 		{name: "terminal tool", finishReason: "length", terminalToolInvocation: true, want: false},
 	}
 
@@ -25,6 +28,19 @@ func TestShouldResumeProviderAfterDone(t *testing.T) {
 				t.Fatalf("shouldResumeProviderAfterDone(%q, %t, %t) = %t, want %t", test.finishReason, test.hadToolInvocation, test.terminalToolInvocation, got, test.want)
 			}
 		})
+	}
+}
+
+func TestIsTokenLimitFinishReason(t *testing.T) {
+	for _, reason := range []string{"length", "max_tokens", "max_output_tokens", "max_completion_tokens", "token_limit", "token_limit_exceeded", "incomplete"} {
+		if !isTokenLimitFinishReason(reason) {
+			t.Errorf("isTokenLimitFinishReason(%q) = false, want true", reason)
+		}
+	}
+	for _, reason := range []string{"stop", "tool_calls", "content_filter", "error", ""} {
+		if isTokenLimitFinishReason(reason) {
+			t.Errorf("isTokenLimitFinishReason(%q) = true, want false", reason)
+		}
 	}
 }
 

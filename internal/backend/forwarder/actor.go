@@ -731,16 +731,18 @@ func (service *Service) handleProviderDoneEvent(stream *ActiveStream, payload *s
 	if err := service.flushAssistantText(stream, conversationID, turnSeq, requestID, accumulatedText, accumulatedReasoning, accumulatedReasoningSignature, accumulatedReasoningSignatureSource, accumulatedReasoningItemID, accumulatedReasoningStatus, accumulatedReasoningSummary, !hadToolInvocation); err != nil {
 		return service.failStreamIfNonTerminal(stream, "unknown", err)
 	}
-	// finish_reason=length means the provider hit its output budget mid-generation.
+	// Providers use different finish reasons for the same output-limit condition:
+	// OpenAI Chat uses length, Responses uses max_output_tokens, and Anthropic uses
+	// max_tokens. Treat all of them as resumable token-limit interruptions.
 	// A truncated tool call cannot be safely replayed, so preserve the partial assistant
 	// output and resume from an internal prompt context instead of inventing a client tool.
-	resumeAfterLength := false
-	if strings.EqualFold(strings.TrimSpace(finishReason), "length") {
-		resumeAfterLength = !terminalToolInvocation
-		log.Printf("forwarder max_tokens_exceeded request_id=%s provider_pass=%d finish_reason=length resume=%t",
-			strings.TrimSpace(requestID), currentProviderPass(stream), resumeAfterLength)
+	resumeAfterTokenLimit := false
+	if isTokenLimitFinishReason(finishReason) {
+		resumeAfterTokenLimit = !terminalToolInvocation
+		log.Printf("forwarder max_tokens_exceeded request_id=%s provider_pass=%d finish_reason=%s resume=%t",
+			strings.TrimSpace(requestID), currentProviderPass(stream), strings.TrimSpace(finishReason), resumeAfterTokenLimit)
 
-		if resumeAfterLength && !hadToolInvocation {
+		if resumeAfterTokenLimit && !hadToolInvocation {
 			if err := service.appendTokenLimitRecoveryContext(stream, conversationID, turnSeq, requestID); err != nil {
 				return service.failStreamIfNonTerminal(stream, "unknown", err)
 			}
@@ -850,7 +852,16 @@ func shouldResumeProviderAfterDone(finishReason string, hadToolInvocation bool, 
 	}
 	return hadToolInvocation ||
 		shouldResumeAfterToolResults(finishReason) ||
-		strings.EqualFold(strings.TrimSpace(finishReason), "length")
+		isTokenLimitFinishReason(finishReason)
+}
+
+func isTokenLimitFinishReason(finishReason string) bool {
+	switch strings.ToLower(strings.TrimSpace(finishReason)) {
+	case "length", "max_tokens", "max_output_tokens", "max_completion_tokens", "token_limit", "token_limit_exceeded", "incomplete":
+		return true
+	default:
+		return false
+	}
 }
 
 func (service *Service) appendTokenLimitRecoveryContext(stream *ActiveStream, conversationID string, turnSeq int64, requestID string) error {

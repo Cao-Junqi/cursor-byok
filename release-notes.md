@@ -1,6 +1,11 @@
 # Release Notes
 
-## [Unreleased] — v0.0.54
+## [Unreleased] — v0.0.55
+
+### fix: 兼容 OpenAI Responses 的 Token 截断原因
+
+**问题**：OpenAI Chat 使用 `finish_reason=length`，但 OpenAI Responses 使用 `response.incomplete` / `max_output_tokens`，Anthropic 使用 `max_tokens`。旧判断只识别 `length`，因此 Responses 截断会被误认为正常完成。
+**修复**：统一识别各 provider 的 token-limit 原因，保留已生成内容并通过恢复上下文续跑；日志保留 provider 原始 `finish_reason`。
 
 ### fix: 输出 Token 截断后可靠自动续跑
 
