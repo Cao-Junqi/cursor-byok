@@ -42,16 +42,14 @@ const (
 	// ponytail: auto-retry for transient stream failures (connection reset, upstream
 	// timeout). Only triggers when zero events were sent to the actor — partial
 	// failures can't be retried without duplicating tool calls.
-	maxProviderStreamRetries    = 3
+	maxProviderStreamRetries     = 3
 	providerStreamRetryBaseDelay = 2 * time.Second
 
-	// ponytail: stream idle watchdog. If no events reach the actor for this duration,
-	// cancel the context to surface a retryable error. Without it, an upstream that
-	// keeps the TCP connection open but stops sending data (common with LongCat and
-	// deepseek during long silent thinking) leaves the client hanging until the model
-	// layer's 4-min idle watchdog fires — far longer than Cursor's client timeout.
-	providerStreamTTFTTimeout       = 120 * time.Second
-	providerStreamInterTokenTimeout = 60 * time.Second
+	// The forwarder and model adapter share the configured provider idle timeout.
+	// Keeping a second, shorter hard-coded timeout here caused otherwise valid
+	// long-thinking streams to be cancelled after 120 seconds.
+	defaultProviderStreamIdleTimeout = 4 * time.Minute
+	minProviderStreamIdleTimeout     = 30 * time.Second
 
 	runtimeThinkingEffortParameterID = "thinking_effort"
 )
@@ -1593,12 +1591,11 @@ func (service *Service) persistDerivedPromptContexts(stream *ActiveStream, conve
 
 func (service *Service) runProviderStream(stream *ActiveStream, token uint64, ctx context.Context, request ProviderRequest, retryCount int) {
 	var streamEventsSent int64
-	// ponytail: idle watchdog — detect upstream silence (model stopped sending but
-	// connection still open). Cancel the context so StartStream returns and the
-	// retry/failStream path fires. Reset on every event received. Mid-stream
-	// cancels surface as a typed error the agent can react to; clean cancels
-	// (zero events) trigger transparent retry.
-	idleTimer := time.NewTimer(providerStreamTTFTTimeout)
+	// Detect an upstream that keeps the TCP connection open but stops producing
+	// effective events. The same configured duration applies before the first
+	// event and between later events, matching the model adapter watchdog.
+	idleTimeout := resolveProviderStreamIdleTimeout(service, ctx)
+	idleTimer := time.NewTimer(idleTimeout)
 	defer idleTimer.Stop()
 	streamCtx, streamCancel := context.WithCancel(ctx)
 	streamDone := make(chan struct{})
@@ -1608,10 +1605,11 @@ func (service *Service) runProviderStream(stream *ActiveStream, token uint64, ct
 		case <-idleTimer.C:
 			// ponytail: upstream went silent. Surface as retryable (clean) or
 			// typed error (partial) so the agent can react instead of hanging.
-			log.Printf("forwarder stream idle timeout request_id=%s model_call_id=%s events_sent=%d",
+			log.Printf("forwarder stream idle timeout request_id=%s model_call_id=%s events_sent=%d timeout=%s",
 				strings.TrimSpace(request.RequestID),
 				strings.TrimSpace(request.ModelCallID),
 				atomic.LoadInt64(&streamEventsSent),
+				idleTimeout,
 			)
 			streamCancel()
 		case <-ctx.Done():
@@ -1619,7 +1617,7 @@ func (service *Service) runProviderStream(stream *ActiveStream, token uint64, ct
 		}
 	}()
 	err := service.provider.StartStream(streamCtx, request, func(event modeladapter.ModelEvent) error {
-		idleTimer.Reset(providerStreamInterTokenTimeout)
+		idleTimer.Reset(idleTimeout)
 		atomic.AddInt64(&streamEventsSent, 1)
 		return service.postStreamCommandWait(stream, streamCommand{
 			Kind: streamCommandProviderEvent,
@@ -1681,6 +1679,19 @@ func (service *Service) runProviderStream(stream *ActiveStream, token uint64, ct
 		"model_call_id":  strings.TrimSpace(request.ModelCallID),
 		"provider_token": token,
 	})
+}
+
+func resolveProviderStreamIdleTimeout(service *Service, ctx context.Context) time.Duration {
+	if service != nil && service.resolver != nil {
+		timeout := service.resolver.ProviderStreamIdleTimeout(ctx)
+		if timeout > 0 {
+			if timeout < minProviderStreamIdleTimeout {
+				return minProviderStreamIdleTimeout
+			}
+			return timeout
+		}
+	}
+	return defaultProviderStreamIdleTimeout
 }
 
 // isRetryableStreamError classifies stream errors as safe for transparent retry.

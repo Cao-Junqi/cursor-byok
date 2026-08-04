@@ -1,6 +1,17 @@
 # Release Notes
 
-## [Unreleased] — v0.0.58
+## [Unreleased] — v0.0.59
+
+### fix: 无 Todo 续做不再被历史工具结果误判为完成
+
+**问题**：纯“继续”请求第一次恢复后，如果历史上已经有过工具结果，但恢复窗口内没有执行新工具，仍可能被误判为合法总结并提前结束。
+**修复**：完成判定同时检查恢复计数；只有真实工具调用将计数重置后，才允许恢复后的无工具总结。否则记录 `continuation_without_action` 并明确失败，避免静默中断。
+
+### fix: provider 流空闲超时统一使用配置值
+
+**问题**：forwarder 另有一套写死的 120 秒首事件/60 秒事件间隔 watchdog，早于配置中的 `providerStreamIdleTimeout: 240` 取消重推理请求，导致约 2 分钟自动中断。
+**修复**：forwarder 与 provider adapter 统一使用 `providerStreamIdleTimeout`，首次事件和后续事件间隔均按该值计时，超时日志记录实际时长。
+**验证**：新增无 Todo 恢复判定、forwarder 超时配置解析和配置管理器读取测试；完整 Go 测试、forwarder race test 与前端生产构建均已通过。
 
 ### fix: 未完成 Todo 时禁止提前结束 Agent 轮次
 

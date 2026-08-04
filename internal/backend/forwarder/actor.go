@@ -1007,6 +1007,12 @@ func classifyContinuationWithoutAction(mode agentv1.AgentMode, latestUserText st
 		return providerCompletionRecoveryResume
 	}
 	if alreadyRecovered {
+		// A historical tool result is not proof that the current recovery made
+		// progress. Real tool invocation resets recoveryAttempts to zero, so a
+		// positive count means this recovery window still has no executed action.
+		if recoveryAttempts > 0 {
+			return providerCompletionRecoveryFail
+		}
 		if hadToolResult {
 			return providerCompletionRecoveryNone
 		}

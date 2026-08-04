@@ -101,7 +101,7 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | provider stream 中途断开 | `logs/app.log` 中的 `stream failed`、`stream retry`、`stream idle timeout` |
 | 自动更新失败 | `logs/app.log` 中的 `检查更新失败`、`download update` 错误 |
 
-## 最新修复记录（v0.0.58）
+## 最新修复记录（v0.0.59）
 
 | Fix | 文件 | 说明 |
 |-----|------|------|
@@ -117,20 +117,22 @@ GitHub Actions 自动构建触发条件：push 到任意分支（见 `.github/wo
 | 14 | `internal/backend/forwarder/actor.go`、`reminders.go` | v0.0.56：reasoning-only 正常完成时注入一次恢复上下文并续跑，重复空完成显式失败 |
 | 15 | `internal/backend/forwarder/actor.go`、`reminders.go` | v0.0.57：纯续做指令遇到“有 reasoning、有进度文本、零工具”的正常完成时，注入一次执行恢复上下文并续跑 |
 | 16 | `internal/backend/forwarder/actor.go`、`types.go` | v0.0.58：结构化 Todo 存在 `pending/in_progress` 时禁止零工具正常完成；按真实工具调用重置恢复计数 |
+| 17 | `internal/backend/forwarder/actor.go`、`service.go` | v0.0.59：无 Todo 恢复必须有本窗口真实工具进展；forwarder watchdog 与 `providerStreamIdleTimeout` 统一，移除写死的 120s/60s 中断 |
 
-### v0.0.58 待实机确认
+### v0.0.59 待实机确认
 
-v0.0.57 已确认安装包、Release tag、运行中二进制和首次恢复日志一致；最新实机请求证明剩余问题是“已有工具结果但 Todo 仍未完成时被提前总结”。v0.0.58 本地测试已覆盖结构化 Todo 终态、工具结果后的续跑和恢复计数重置，仍需用安装后的 Release 产物复现一次完整 Todo 未完成场景。
+v0.0.58 已确认 Todo 保护生效，但实机仍发现无 Todo 请求在恢复后可能提前结束，且 Ark DeepSeek 请求准确在 120 秒触发 forwarder watchdog。v0.0.59 已覆盖这两个共享根因，仍需用安装后的 Release 产物复现无 Todo 恢复和长时间 provider thinking 场景。
 
 验收标准：
 
-- plist 显示 `0.0.58`
-- 安装目录内真实二进制包含 `C0.0.58`、`continuation_execution_recovery`、`continuation_without_action`、`in_progress`
+- plist 显示 `0.0.59`
+- 安装目录内真实二进制包含 `C0.0.59`、`continuation_execution_recovery`、`continuation_without_action`、`in_progress`、`providerStreamIdleTimeout`
 - Todo 仍有活动项时，零工具正常完成不得结束；`app.log` 应出现带 `incomplete_todos=true` 的恢复或明确失败日志
+- 无 Todo 的恢复窗口没有新工具时不得被历史工具结果放行；配置为 240 秒时不得再在 120 秒出现 forwarder timeout
 
 ```bash
 defaults read /Applications/Cursor助手.app/Contents/Info CFBundleShortVersionString
-strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.58|continuation_execution_recovery|continuation_without_action|incomplete_todos'
+strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.59|continuation_execution_recovery|continuation_without_action|incomplete_todos|providerStreamIdleTimeout'
 ```
 
 ## 约束

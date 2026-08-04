@@ -1,8 +1,17 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-04（branch `main`，发布目标 v0.0.58）
+> 最后更新：2026-08-04（branch `main`，发布目标 v0.0.59）
 
 ## 已完成的工作
+
+### Fix 17：无 Todo 恢复状态与 provider 空闲超时统一修复（v0.0.59）
+
+- **问题一**：纯“继续”恢复后，历史上有工具结果但本恢复窗口没有新工具时，仍可能被当成最终总结，导致无 Todo 请求提前结束
+- **修复一**：`classifyContinuationWithoutAction` 检查 `recoveryAttempts`；只有真实工具调用重置计数后才允许无工具总结，否则明确失败
+- **问题二**：`service.go` 的 forwarder watchdog 写死 120 秒首事件、60 秒事件间隔，覆盖了配置文件中的 `providerStreamIdleTimeout: 240`
+- **修复二**：forwarder 首次和后续事件统一读取 resolver 的 `providerStreamIdleTimeout`，日志记录实际 timeout；默认值仍为 240 秒
+- **测试**：新增无 Todo 回归测试、forwarder 超时解析测试和配置管理器读取测试
+- **待验证**：安装 v0.0.59 后确认二进制版本、无 Todo 续做不提前完成，以及 Ark/DeepSeek 长时间 thinking 不再在 120 秒被取消
 
 ### Fix 16：结构化 Todo 未完成时禁止提前结束（v0.0.58）
 
@@ -141,12 +150,12 @@
 - **无法在代码层简单修复**：不加标签的推理内容与正常回复文本无法可靠区分，需要上游代理修复输出格式
 - **缓解方案**（可选）：对接使用 `reasoning_content` 字段的代理（已在 `openai.go:562` 支持），或换用支持 Anthropic 原生 thinking block 的端点
 
-当前开发分支为 `main`，发布目标为 `v0.0.56`。
+当前开发分支为 `main`，发布目标为 `v0.0.59`。
 
 ## 待办 / 未决问题
 
-1. **v0.0.56 实机验证**：GitHub Release 构建完成并安装后，按下方命令同时核对 plist 和真实二进制；不能只相信应用界面显示的版本号。
-2. **reasoning-only 实测**：再次出现只有内部推理的正常完成时，日志应出现 `forwarder empty completion ... recovery=resume`，随后同一 turn 启动下一次 provider pass；若连续发生两次则应显示 `empty_response`，不能静默完成。
+1. **v0.0.59 实机验证**：GitHub Release 构建完成并安装后，按下方命令同时核对 plist 和真实二进制；不能只相信应用界面显示的版本号。
+2. **无 Todo 与长 thinking 实测**：纯“继续”恢复后不得因历史工具结果提前结束；`providerStreamIdleTimeout: 240` 下不得再出现 120 秒 forwarder timeout，真实超时日志必须包含 `timeout=4m0s`。
 3. **`api2.cursor.sh` 上的非 AI 路径**：日志里偶尔出现 `api2.cursor.sh:443 remote error: tls: unknown certificate`，这些是 api2 上的非推理路径（如 feature flag 拉取）。目前 AI 推理正常工作，这些错误不影响功能，但如果以后 api2 的非 AI 路径也出问题，可以考虑对特定 path 做 bypass（需要先 MITM 再按路径判断，或改成 api2 仅对已知 AI 路径做 MITM）。
 4. **前端测试**：Fix 1/2 的前端改动没有自动化测试覆盖，建议人工验证批量导入和分组展示功能。
 
@@ -166,12 +175,12 @@ cat ~/.cursor-local-assistant-v2/config.yaml
 # 验证 Cursor HTTP proxy 设置
 grep -E "proxy|disableHttp2" ~/Library/Application\ Support/Cursor/User/settings.json
 
-# 安装 v0.0.56 后同时核对 bundle 元数据和真实二进制
+# 安装 v0.0.59 后同时核对 bundle 元数据和真实二进制
 defaults read /Applications/Cursor助手.app/Contents/Info CFBundleShortVersionString
-strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.56|empty_completion_recovery|recovery=resume|empty_response'
+strings /Applications/Cursor助手.app/Contents/MacOS/Cursor助手 | rg 'C0\.0\.59|continuation_without_action|providerStreamIdleTimeout|timeout=%s'
 
 # 与 GitHub Release 资产核对（先下载对应架构的 tar.gz）
-shasum -a 256 cursor-byok-0.0.56-macos-arm64.tar.gz
+shasum -a 256 cursor-byok-0.0.59-macos-arm64.tar.gz
 ```
 
 ## 重要约束（接手时必读）
