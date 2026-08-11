@@ -47,3 +47,33 @@ func isHTTPStatusError(err error, statusCode int) bool {
 	}
 	return strings.Contains(err.Error(), fmt.Sprintf("status=%d", statusCode))
 }
+
+// extractProviderErrorMessage 从 provider 错误中提取可读消息（取 body= 之后的响应体文本）。
+func extractProviderErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := strings.TrimSpace(err.Error())
+	if i := strings.Index(msg, "body="); i >= 0 {
+		msg = strings.TrimSpace(msg[i+len("body="):])
+	}
+	return msg
+}
+
+// mapTechnicalProviderMessage 把常见技术错误映射为可读提示；未命中则回退到响应体文本。
+func mapTechnicalProviderMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	switch {
+	case isHTTPStatusError(err, http.StatusTooManyRequests), isCapacityStyleProviderMessage(err):
+		return "上游繁忙或限流，请稍后重试"
+	case isHTTPStatusError(err, http.StatusUnauthorized):
+		return "API Key 无效或未授权"
+	case isHTTPStatusError(err, http.StatusForbidden):
+		return "无权限访问该模型"
+	case isHTTPStatusError(err, http.StatusNotFound):
+		return "模型或端点不存在（404）"
+	}
+	return extractProviderErrorMessage(err)
+}

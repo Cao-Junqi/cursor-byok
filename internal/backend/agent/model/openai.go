@@ -474,8 +474,8 @@ func (adapter *OpenAIAdapter) streamChatCompletions(ctx context.Context, req Str
 		if len(req.Tools) > 0 {
 			requestBody.Tools = req.Tools
 		}
-		if strings.TrimSpace(req.ReasoningEffort) != "" {
-			requestBody.ReasoningEffort = req.ReasoningEffort
+		if effort := openAIEffectiveReasoningEffort(modelID, req.ReasoningEffort); effort != "" {
+			requestBody.ReasoningEffort = effort
 		}
 		body = requestBody
 	} else {
@@ -488,6 +488,7 @@ func (adapter *OpenAIAdapter) streamChatCompletions(ctx context.Context, req Str
 		return err
 	}
 	applyOpenAIThinkingDisable(bodyMap, req, baseURL, modelID, req.OpenAIEndpoint)
+	stripOpenAIReasoningForUnsupportedModel(bodyMap, modelID)
 	if err := ApplyOpenAIExtraParams(bodyMap, req.OpenAIExtraParamsEnabled, req.OpenAIExtraParamsJSON); err != nil {
 		finishedAt = time.Now().UTC()
 		recordLLMSummaryArtifact(req, buildLLMSummaryPayload(req, "openai", modelID, startedAt, time.Time{}, finishedAt, "", 0, 0, 0, 0, err))
@@ -951,7 +952,7 @@ func (adapter *OpenAIAdapter) streamResponses(ctx context.Context, req StreamReq
 			}
 			requestBody.Tools = tools
 		}
-		if effort := strings.TrimSpace(req.ReasoningEffort); effort != "" {
+		if effort := openAIEffectiveReasoningEffort(modelID, req.ReasoningEffort); effort != "" {
 			requestBody.Reasoning = &openAIResponsesReasoning{Effort: effort}
 			requestBody.Include = []string{"reasoning.encrypted_content"}
 		}
@@ -966,6 +967,7 @@ func (adapter *OpenAIAdapter) streamResponses(ctx context.Context, req StreamReq
 		return err
 	}
 	applyOpenAIThinkingDisable(bodyMap, req, baseURL, modelID, req.OpenAIEndpoint)
+	stripOpenAIReasoningForUnsupportedModel(bodyMap, modelID)
 	if err := ApplyOpenAIExtraParams(bodyMap, req.OpenAIExtraParamsEnabled, req.OpenAIExtraParamsJSON); err != nil {
 		finishedAt = time.Now().UTC()
 		recordLLMSummaryArtifact(req, buildLLMSummaryPayload(req, "openai", modelID, startedAt, time.Time{}, finishedAt, "", 0, 0, 0, 0, err))

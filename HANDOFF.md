@@ -1,8 +1,21 @@
 # HANDOFF.md — 当前工作状态交接
 
-> 最后更新：2026-08-03（commit `484f563`，branch `fix/perf-leaks`，v0.0.45）
+> 最后更新：2026-08-11（branch `fix/perf-leaks`，v0.0.46）
 
 ## 已完成的工作
+
+### Fix 11：provider 服务端重试 — 解决"断流"（本次核心修复）
+
+- **问题**：使用自定义 provider 时，上游瞬时错误（429 限流、502/503/504、容量不足、连接重置/EOF）直接断流，agent 会话被取消/完成，无可读错误
+- **根因**：`agent/model/retry.go` 的 `doProviderRequestWithRetry` 是一次性 `client.Do` 裸壳；forwarder 层 `isRetryableStreamError` 只匹配网络/连接层错误，429/5xx/容量错误一律不重试 → failStream → 断流。（对照 CursorUltra 5.0.12 逆向确认差距。）
+- **修复文件**：`internal/backend/agent/model/retry.go`、`retry_classify.go`（新）、`openai.go`、`openai_reasoning.go`（新）、`http_error.go`
+- **要点**：
+  - `doProviderRequestWithRetry` 改为真实重试循环（传输 + 429/502/503/504 状态瞬时即重试；容量长退避；不可重试立即返回；最大 3 次；零内容投递前重试，天然安全）
+  - 分类子串表从 ultra 二进制解码；reasoning 自适应剥离 composer 系模型 `reasoning_effort`；重试耗尽返回可读提示
+  - 三个调用点（openai.go:524/1003、anthropic.go:320）零改动；forwarder 零事件重试保留为第二层兜底
+- **测试**：`retry_classify_test.go` / `retry_test.go`（含 adapter 端到端 429→正常流式）/ `openai_reasoning_test.go`，model + forwarder 全量回归通过
+- **版本**：`0.0.45` → `0.0.46`
+- **状态**：已推送到 `fix/perf-leaks`，触发 GitHub Actions 构建
 
 ### Fix 1：Anthropic 批量导入 baseURL + 模型名可编辑（`33079da`）
 
