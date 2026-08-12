@@ -77,7 +77,7 @@ const chartData = computed(() => ({
   datasets: [
     {
       data: [percentage.value, Math.max(0, 100 - percentage.value)],
-      backgroundColor: ["#4ade80", "#373737"],
+      backgroundColor: ["#10AD5D", "#3a3a3a"],
       borderWidth: 0,
       hoverBorderWidth: 0,
       selfJoin: false,
@@ -117,8 +117,7 @@ const chartOptions = {
       <Doughnut class="h-full w-full" :data="chartData" :options="chartOptions" />
       <div class="pointer-events-none absolute inset-x-0 bottom-[10px] flex justify-center">
         <div
-          class="text-[20px] leading-none text-white"
-          style="font-family: var(--font-num)"
+          class="text-[20px] leading-none text-white font-num"
         >
           {{ label }}
         </div>

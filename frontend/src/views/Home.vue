@@ -82,7 +82,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4 p-4 pt-0 text-[#e5e5e5]">
+  <div class="flex flex-col gap-4 p-4 pt-0 text-ink-primary">
     <HomeMetricsCard
       :metrics="appState.homeMetrics"
       :loading="appState.homeMetricsLoading"
@@ -108,7 +108,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-if="appState.serviceLastError"
-          class="rounded-[8px] border border-[#4b1d1d] bg-[#2a1313] px-3 py-2 text-sm text-[#fca5a5]">
+          class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
           {{ appState.serviceLastError }}
         </div>
 
@@ -128,8 +128,8 @@ onBeforeUnmount(() => {
     <Card>
       <div class="flex items-center justify-between gap-4">
         <div>
-          <h2 class="text-base font-medium text-white">本地配置</h2>
-          <div class="text-sm text-[#a3a3a3]">打开设置目录，或单独管理模型配置</div>
+          <h2 class="text-base font-medium text-ink-primary">本地配置</h2>
+          <div class="text-sm text-ink-secondary">打开设置目录，或单独管理模型配置</div>
         </div>
         <div class="center-row gap-2">
           <Button variant="default" @click="handleOpenConfig">设置文件夹</Button>

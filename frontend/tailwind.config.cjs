@@ -34,19 +34,34 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: "#f0f7ff",
-          100: "#e6f4ff",
-          200: "#bae0ff",
-          300: "#91caff",
-          400: "#69b1ff",
-          500: "#4096ff",
-          600: "#1677ff",
-          700: "#0958d9",
-          800: "#003eb3",
-          900: "#002c8c",
-          950: "#001d66",
-          DEFAULT: "#1677ff",
+        // 品牌绿：主色 #10AD5D，用于焦点环/选中态/主按钮/状态
+        brand: {
+          300: "#5fd6a0",
+          400: "#34d399",
+          500: "#10AD5D",
+          600: "#0b8a4b",
+          700: "#086e3d",
+          DEFAULT: "#10AD5D",
+        },
+        // 表面层级：page < card < input < hover
+        surface: {
+          page: "#121212",
+          card: "#171717",
+          input: "#1f1f1f",
+          hover: "#262626",
+          overlay: "#0f0f0f",
+        },
+        // 文字层级：primary(主) / secondary(次) / muted(弱)
+        ink: {
+          primary: "#e5e5e5",
+          secondary: "#a1a1aa",
+          muted: "#71717a",
+        },
+        // 分割线/边框：subtle < DEFAULT < strong
+        line: {
+          subtle: "#232323",
+          DEFAULT: "#2a2a2a",
+          strong: "#3a3a3a",
         },
       },
       fontFamily: {
@@ -65,6 +80,10 @@ module.exports = {
         xs: ["12px", { lineHeight: "16px" }],
         sm: ["13px", { lineHeight: "18px" }],
         lg: ["20px", { lineHeight: "28px" }],
+      },
+      boxShadow: {
+        card: "0 1px 2px rgba(0, 0, 0, 0.4)",
+        pop: "0 12px 32px rgba(0, 0, 0, 0.45)",
       },
       zIndex: {
         999: "999",

@@ -456,7 +456,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col p-4 pt-0 text-[#e5e5e5] overflow-hidden">
+  <div class="flex h-full min-h-0 flex-col p-4 pt-0 text-ink-primary overflow-hidden">
     <div class="shrink-0 pb-4">
       <div class="flex items-center justify-between gap-4">
         <div class="center-row gap-2">
@@ -466,8 +466,8 @@ onBeforeUnmount(() => {
             type="button"
             class="center-row gap-2 rounded-[8px] border px-3 py-2 text-sm transition-colors duration-150"
             :class="activeType === tab.value
-              ? 'border-[#1ca35a] bg-[#123322] text-white'
-              : 'border-[#343434] bg-[#252525] text-[#a3a3a3] hover:border-[#4a4a4a] hover:text-[#e5e5e5]'"
+              ? 'border-brand-500 bg-brand-500/15 text-white'
+              : 'border-line bg-surface-hover text-ink-secondary hover:border-line hover:text-ink-primary'"
             @click="activeType = tab.value"
           >
             <span :class="[tab.icon, 'text-[16px]']"></span>
@@ -490,7 +490,7 @@ onBeforeUnmount(() => {
 
     <div class="min-h-0 flex-1">
       <div v-if="filteredAdapters.length === 0"
-        class="flex h-full min-h-[220px] items-center justify-center rounded-[8px] border border-dashed border-[#3a3a3a] bg-[#232323] px-4 text-sm text-[#a3a3a3]">
+        class="flex h-full min-h-[220px] items-center justify-center rounded-[8px] border border-dashed border-line-strong bg-surface-input px-4 text-sm text-ink-secondary">
         当前还没有配置任何 {{ typeLabel(activeType) }} 模型。
       </div>
 
@@ -504,10 +504,10 @@ onBeforeUnmount(() => {
                 @click="toggleGroup(group.key)"
               >
                 <span
-                  :class="[isGroupExpanded(group.key) ? 'icon-[mdi--chevron-down]' : 'icon-[mdi--chevron-right]', 'mt-1 shrink-0 text-[18px] text-[#8f8f8f]']"
+                  :class="[isGroupExpanded(group.key) ? 'icon-[mdi--chevron-down]' : 'icon-[mdi--chevron-right]', 'mt-1 shrink-0 text-[18px] text-ink-muted']"
                 ></span>
                 <span
-                  class="center-row shrink-0 gap-1 rounded-[999px] border border-[#3f3f3f] px-[7px] py-[4px] text-[11px] font-medium text-[#cfcfcf]"
+                  class="center-row shrink-0 gap-1 rounded-[999px] border border-line-strong px-[7px] py-[4px] text-[11px] font-medium text-ink-secondary"
                 >
                   <span class="icon-[bxl--openai] text-[14px] !text-white" v-if="group.type === 'openai'"></span>
                   <span class="icon-[logos--claude-icon] text-[14px]" v-else></span>
@@ -515,7 +515,7 @@ onBeforeUnmount(() => {
                 </span>
                 <div class="min-w-0 flex-1">
                   <div class="truncate text-base font-medium text-white" :title="group.baseURL">{{ formatHost(group.baseURL) }}</div>
-                  <div class="mt-0.5 truncate text-xs text-[#737373]">{{ maskSecret(group.apiKey) }} · {{ group.adapters.length }} 个模型</div>
+                  <div class="mt-0.5 truncate text-xs text-ink-muted">{{ maskSecret(group.apiKey) }} · {{ group.adapters.length }} 个模型</div>
                 </div>
               </button>
               <div class="center-row shrink-0 gap-2">
@@ -524,15 +524,15 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div v-if="isGroupExpanded(group.key)" class="flex flex-col gap-2 border-t border-[#343434] pt-3">
+            <div v-if="isGroupExpanded(group.key)" class="flex flex-col gap-2 border-t border-line pt-3">
               <div
                 v-for="adapter in group.adapters"
                 :key="adapter.id || `${adapter.baseURL}-${adapter.modelID}`"
-                class="flex flex-col gap-2 rounded-[8px] bg-[#232323] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                class="flex flex-col gap-2 rounded-[8px] bg-surface-input px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div class="min-w-0 flex-1">
                   <div class="truncate text-sm font-medium text-white">{{ adapter.displayName }}</div>
-                  <div class="mt-0.5 truncate text-xs text-[#8f8f8f]">{{ adapter.modelID }}</div>
+                  <div class="mt-0.5 truncate text-xs text-ink-muted">{{ adapter.modelID }}</div>
                 </div>
                 <div class="center-row shrink-0 flex-wrap gap-2">
                   <ModelAdapterTestCard
@@ -569,35 +569,35 @@ onBeforeUnmount(() => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
         @click.self="closeGroupEditModal"
       >
-        <div class="w-full max-w-sm rounded-[10px] border border-[#333] bg-[#1e1e1e] flex flex-col">
-          <div class="flex items-center justify-between px-5 py-4 border-b border-[#2a2a2a]">
+        <div class="w-full max-w-sm rounded-[10px] border border-line bg-surface-input flex flex-col">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-line">
             <h2 class="text-base font-medium text-white">编辑供应商</h2>
-            <button class="text-[#666] hover:text-white transition-colors" @click="closeGroupEditModal">
+            <button class="text-ink-muted hover:text-white transition-colors" @click="closeGroupEditModal">
               <span class="icon-[mdi--close] text-[18px]"></span>
             </button>
           </div>
           <div class="px-5 py-4 flex flex-col gap-3">
-            <p class="text-xs text-[#8a8a8a]">修改将同步应用到该供应商下的全部 {{ groupEditModelCount }} 个模型。</p>
+            <p class="text-xs text-ink-muted">修改将同步应用到该供应商下的全部 {{ groupEditModelCount }} 个模型。</p>
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-[#8a8a8a]">接口地址</label>
+              <label class="text-xs text-ink-muted">接口地址</label>
               <input
                 v-model="groupEditForm.baseURL"
                 type="text"
                 :placeholder="groupEditTarget.type === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com'"
-                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+                class="w-full rounded-[6px] border border-line bg-surface-input px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
               />
             </div>
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-[#8a8a8a]">访问密钥</label>
+              <label class="text-xs text-ink-muted">访问密钥</label>
               <input
                 v-model="groupEditForm.apiKey"
                 type="password"
                 placeholder="sk-..."
-                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+                class="w-full rounded-[6px] border border-line bg-surface-input px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
               />
             </div>
           </div>
-          <div class="flex justify-end gap-2 px-5 py-4 border-t border-[#2a2a2a]">
+          <div class="flex justify-end gap-2 px-5 py-4 border-t border-line">
             <Button variant="default" :disabled="groupEditSaving" @click="closeGroupEditModal">取消</Button>
             <Button
               variant="primary"
@@ -620,35 +620,35 @@ onBeforeUnmount(() => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
         @click.self="closeAddModelModal"
       >
-        <div class="w-full max-w-sm rounded-[10px] border border-[#333] bg-[#1e1e1e] flex flex-col">
-          <div class="flex items-center justify-between px-5 py-4 border-b border-[#2a2a2a]">
+        <div class="w-full max-w-sm rounded-[10px] border border-line bg-surface-input flex flex-col">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-line">
             <h2 class="text-base font-medium text-white">添加模型</h2>
-            <button class="text-[#666] hover:text-white transition-colors" @click="closeAddModelModal">
+            <button class="text-ink-muted hover:text-white transition-colors" @click="closeAddModelModal">
               <span class="icon-[mdi--close] text-[18px]"></span>
             </button>
           </div>
           <div class="px-5 py-4 flex flex-col gap-3">
-            <p class="text-xs text-[#8a8a8a]">接入点与密钥继承自 {{ formatHost(addModelTarget.baseURL) }}。</p>
+            <p class="text-xs text-ink-muted">接入点与密钥继承自 {{ formatHost(addModelTarget.baseURL) }}。</p>
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-[#8a8a8a]">模型 ID</label>
+              <label class="text-xs text-ink-muted">模型 ID</label>
               <input
                 v-model="addModelForm.modelID"
                 type="text"
                 placeholder="例如：gpt-4.1 / claude-sonnet-4-5"
-                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+                class="w-full rounded-[6px] border border-line bg-surface-input px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
               />
             </div>
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-[#8a8a8a]">展示名称（可选）</label>
+              <label class="text-xs text-ink-muted">展示名称（可选）</label>
               <input
                 v-model="addModelForm.displayName"
                 type="text"
                 placeholder="留空则使用模型 ID"
-                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+                class="w-full rounded-[6px] border border-line bg-surface-input px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
               />
             </div>
           </div>
-          <div class="flex justify-end gap-2 px-5 py-4 border-t border-[#2a2a2a]">
+          <div class="flex justify-end gap-2 px-5 py-4 border-t border-line">
             <Button variant="default" :disabled="addModelSaving" @click="closeAddModelModal">取消</Button>
             <Button variant="primary" :disabled="addModelSaving || !addModelForm.modelID.trim()" @click="handleAddModelSubmit">
               {{ addModelSaving ? "添加中..." : "添加" }}
@@ -667,12 +667,12 @@ onBeforeUnmount(() => {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
         @click.self="closeImportModal"
       >
-        <div class="w-full max-w-md rounded-[10px] border border-[#333] bg-[#1e1e1e] flex flex-col max-h-[85vh]">
+        <div class="w-full max-w-md rounded-[10px] border border-line bg-surface-input flex flex-col max-h-[85vh]">
           <!-- 头部 -->
-          <div class="flex items-center justify-between px-5 py-4 border-b border-[#2a2a2a] shrink-0">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
             <h2 class="text-base font-medium text-white">批量导入模型</h2>
             <button
-              class="text-[#666] hover:text-white transition-colors"
+              class="text-ink-muted hover:text-white transition-colors"
               @click="closeImportModal"
             >
               <span class="icon-[mdi--close] text-[18px]"></span>
@@ -689,8 +689,8 @@ onBeforeUnmount(() => {
                 type="button"
                 class="center-row gap-1.5 rounded-[6px] border px-3 py-1.5 text-sm transition-colors"
                 :class="importForm.type === tab.value
-                  ? 'border-[#1ca35a] bg-[#123322] text-white'
-                  : 'border-[#343434] bg-[#252525] text-[#a3a3a3] hover:border-[#4a4a4a] hover:text-[#e5e5e5]'"
+                  ? 'border-brand-500 bg-brand-500/15 text-white'
+                  : 'border-line bg-surface-hover text-ink-secondary hover:border-line hover:text-ink-primary'"
                 @click="setImportType(tab.value)"
               >
                 <span :class="[tab.icon, 'text-[14px]']"></span>
@@ -700,32 +700,32 @@ onBeforeUnmount(() => {
 
             <!-- base URL -->
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-[#8a8a8a]">接口地址</label>
+              <label class="text-xs text-ink-muted">接口地址</label>
               <input
                 v-model="importForm.baseURL"
                 type="text"
                 :placeholder="importForm.type === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com'"
-                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+                class="w-full rounded-[6px] border border-line bg-surface-input px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
               />
             </div>
 
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-[#8a8a8a]">供应商名称（可选，作为模型名前缀）</label>
+              <label class="text-xs text-ink-muted">供应商名称（可选，作为模型名前缀）</label>
               <input
                 v-model="importForm.providerName"
                 type="text"
                 placeholder="如：硅基、DeepSeek、OpenRouter..."
-                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+                class="w-full rounded-[6px] border border-line bg-surface-input px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
               />
             </div>
 
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-[#8a8a8a]">访问密钥</label>
+              <label class="text-xs text-ink-muted">访问密钥</label>
               <input
                 v-model="importForm.apiKey"
                 type="password"
                 placeholder="sk-..."
-                class="w-full rounded-[6px] border border-[#333] bg-[#141414] px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
+                class="w-full rounded-[6px] border border-line bg-surface-input px-3 py-2 text-sm text-white placeholder-[#555] outline-none focus:border-[#555]"
               />
             </div>
 
@@ -740,17 +740,17 @@ onBeforeUnmount(() => {
               {{ importFetching ? "获取中..." : "获取模型列表" }}
             </Button>
 
-            <div v-if="importError" class="rounded-[6px] border border-[#4b1d1d] bg-[#2a1313] px-3 py-2 text-xs text-[#fca5a5]">
+            <div v-if="importError" class="rounded-[6px] border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
               {{ importError }}
             </div>
           </div>
 
           <!-- 模型列表 -->
-          <div v-if="importModels.length > 0" class="flex flex-col min-h-0 flex-1 border-t border-[#2a2a2a]">
+          <div v-if="importModels.length > 0" class="flex flex-col min-h-0 flex-1 border-t border-line">
             <div class="flex items-center justify-between px-5 py-2 shrink-0">
-              <span class="text-xs text-[#8a8a8a]">共 {{ importModels.length }} 个模型，已选 {{ importSelected.size }}</span>
+              <span class="text-xs text-ink-muted">共 {{ importModels.length }} 个模型，已选 {{ importSelected.size }}</span>
               <button
-                class="text-xs text-[#4ea76e] hover:text-[#6dbf89] transition-colors"
+                class="text-xs text-brand-500 hover:text-brand-400 transition-colors"
                 @click="toggleImportAll"
               >
                 {{ importAllSelected ? "取消全选" : "全选" }}
@@ -760,30 +760,30 @@ onBeforeUnmount(() => {
               <label
                 v-for="model in importModels"
                 :key="model.id"
-                class="flex items-center gap-3 rounded-[6px] px-2 py-1.5 cursor-pointer hover:bg-[#252525] transition-colors"
+                class="flex items-center gap-3 rounded-[6px] px-2 py-1.5 cursor-pointer hover:bg-surface-hover transition-colors"
               >
                 <input
                   type="checkbox"
                   :checked="importSelected.has(model.id)"
-                  class="accent-[#1ca35a] w-4 h-4 shrink-0"
+                  class="accent-brand-500 w-4 h-4 shrink-0"
                   @change="toggleImportModel(model.id)"
                 />
                 <div class="min-w-0 flex-1 flex flex-col gap-0.5">
                   <input
                     :value="importNameFor(model)"
                     type="text"
-                    class="w-full bg-transparent text-sm text-white truncate outline-none border-b border-transparent hover:border-[#3a3a3a] focus:border-[#555] transition-colors"
+                    class="w-full bg-transparent text-sm text-white truncate outline-none border-b border-transparent hover:border-line-strong focus:border-[#555] transition-colors"
                     @click.stop
                     @input="importNames[model.id] = $event.target.value"
                   />
-                  <div v-if="model.displayName !== model.id" class="text-xs text-[#666] truncate">{{ model.id }}</div>
+                  <div v-if="model.displayName !== model.id" class="text-xs text-ink-muted truncate">{{ model.id }}</div>
                 </div>
               </label>
             </div>
           </div>
 
           <!-- 底部操作 -->
-          <div v-if="importModels.length > 0" class="px-5 py-4 border-t border-[#2a2a2a] center-row justify-end gap-2 shrink-0">
+          <div v-if="importModels.length > 0" class="px-5 py-4 border-t border-line center-row justify-end gap-2 shrink-0">
             <Button variant="default" :disabled="importAdding" @click="closeImportModal">取消</Button>
             <Button
               variant="primary"

@@ -5,22 +5,22 @@ provideMessage();
 
 const MESSAGE_THEME = {
   success: {
-    containerClass: "bg-[#10AD5D] text-white",
+    containerClass: "border-brand-500/30 bg-brand-500/15 text-brand-400",
     iconClass: "icon-[dashicons--yes]",
     iconExtraClass: "",
   },
   error: {
-    containerClass: "bg-[#D84C4C] text-white",
+    containerClass: "border-red-500/30 bg-red-500/15 text-red-400",
     iconClass: "",
     iconExtraClass: "",
   },
   info: {
-    containerClass: "bg-[#F08A24] text-white",
+    containerClass: "border-amber-500/30 bg-amber-500/15 text-amber-400",
     iconClass: "",
     iconExtraClass: "",
   },
   loading: {
-    containerClass: "bg-[#3a3a3a] text-white",
+    containerClass: "border-line-strong bg-surface-input text-ink-primary",
     iconClass: "icon-[mingcute--loading-fill]",
     iconExtraClass: "animate-spin",
   },
@@ -37,7 +37,7 @@ function resolveTheme(type) {
       <div
         v-if="messageState.current"
         :key="messageState.current.id"
-        class="pointer-events-auto inline-flex max-w-full items-center gap-2 rounded-full px-4 py-2 text-sm shadow-[0_8px_24px_rgba(0,0,0,0.28)]"
+        class="pointer-events-auto inline-flex max-w-full items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-pop"
         :class="resolveTheme(messageState.current.type).containerClass"
       >
         <span

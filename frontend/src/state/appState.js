@@ -986,7 +986,7 @@ export const appViewState = reactive({
     return "服务未启动";
   }),
   serviceStatusClass: computed(() =>
-    appState.serviceRunning ? "text-[#22c55e]" : "text-[#f59e0b]",
+    appState.serviceRunning ? "text-green-500" : "text-amber-500",
   ),
   serviceButtonText: computed(() => {
     if (appState.serviceBusy) {

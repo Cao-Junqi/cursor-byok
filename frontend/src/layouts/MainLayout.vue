@@ -188,7 +188,7 @@ onUnmounted(() => {
       style="--wails-draggable: drag"
       :class="{ '!justify-center': !isWindows }"
     >
-      <div class="center-row gap-2" style="font-family: var(--font-num);">
+      <div class="center-row gap-2 font-num">
         <img v-if="showIcon" :src="Logo" class="w-[18px] h-[18px]" />
         <div>{{ title }}</div>
       </div>
@@ -197,13 +197,13 @@ onUnmounted(() => {
         class="absolute right-[10px] top-[8px] z-99999 center-row gap-[1px]"
       >
         <button
-          class="text-[20px] center-row justify-center w-[30px] h-[23px] rounded-[4px] text-[#777] hover:bg-[#333] hover:text-[#ddd] cursor-pointer"
+          class="text-[20px] center-row justify-center w-[30px] h-[23px] rounded-md text-ink-muted hover:bg-line hover:text-ink-primary cursor-pointer"
           @click="minimizeWindow"
         >
           <span class="icon-[ic--round-minus]"></span>
         </button>
         <button
-          class="text-[20px] center-row justify-center w-[30px] h-[23px] rounded-[4px] text-[#777] hover:bg-[#333] hover:text-[#ddd] cursor-pointer"
+          class="text-[20px] center-row justify-center w-[30px] h-[23px] rounded-md text-ink-muted hover:bg-line hover:text-ink-primary cursor-pointer"
           @click="closeWindow"
         >
           <span class="icon-[ic--round-close]"></span>
@@ -217,7 +217,7 @@ onUnmounted(() => {
 
     <footer
       v-if="showFooter"
-      class="flex !pr-1 h-[30px] shrink-0 items-center gap-[8px] border-t border-[#242424] px-[14px] text-[12px] text-[#8f8f8f]"
+      class="flex !pr-1 h-[30px] shrink-0 items-center gap-[8px] border-t border-line-subtle px-[14px] text-[12px] text-ink-muted"
     >
       <div
         v-if="proxyBadgeText"
@@ -230,7 +230,7 @@ onUnmounted(() => {
       <button
         v-if="!updateViewState.footerDownloading"
         type="button"
-        class="center-row shrink-0 gap-[6px] cursor-pointer rounded-[6px] px-[6px] py-[3px] transition-colors duration-150 hover:bg-[#1f1f1f] hover:text-[#e5e5e5]"
+        class="center-row shrink-0 gap-[6px] cursor-pointer rounded-md px-[6px] py-[3px] transition-colors duration-150 hover:bg-surface-input hover:text-ink-primary"
         :disabled="updateViewState.footerBusy"
         @click="handleCheckForUpdates"
       >
@@ -239,7 +239,7 @@ onUnmounted(() => {
       </button>
       <button
         type="button"
-        class="center-row shrink-0 gap-[2px]  cursor-pointer rounded-[6px] px-[6px] py-[3px] transition-colors duration-150 hover:bg-[#1f1f1f] hover:text-[#e5e5e5]"
+        class="center-row shrink-0 gap-[2px]  cursor-pointer rounded-md px-[6px] py-[3px] transition-colors duration-150 hover:bg-surface-input hover:text-ink-primary"
         @click="handleOpenUsageDocs"
       >
         <span class="icon-[mdi--file-document-outline] text-[15px]"></span>
@@ -248,7 +248,7 @@ onUnmounted(() => {
       <button
         v-if="localizedAuthorInfo"
         type="button"
-        class="center-row shrink-0 gap-[6px] cursor-pointer rounded-[6px] px-[6px] py-[3px] transition-colors duration-150 hover:bg-[#1f1f1f] hover:text-[#e5e5e5]"
+        class="center-row shrink-0 gap-[6px] cursor-pointer rounded-md px-[6px] py-[3px] transition-colors duration-150 hover:bg-surface-input hover:text-ink-primary"
         @click="handleOpenAuthorHome"
       >
         <span class="icon-[ant-design--bilibili-outlined] text-[14px]"></span>
@@ -261,14 +261,14 @@ onUnmounted(() => {
         <span class="shrink-0">{{ updateViewState.footerVersionLabel }}</span>
         <div class="center-row min-w-0 gap-[8px]">
           <div
-            class="h-[6px] w-[120px] overflow-hidden rounded-full bg-[#1f1f1f]"
+            class="h-[6px] w-[120px] overflow-hidden rounded-full bg-surface-input"
           >
             <div
-              class="h-full rounded-full bg-gradient-to-r from-[#10AD5D] to-[#29c776]"
+              class="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400"
               :style="updateViewState.footerProgressStyle"
             ></div>
           </div>
-          <span class="shrink-0 text-[#d4d4d4]">{{
+          <span class="shrink-0 text-ink-secondary">{{
             updateViewState.footerProgressText
           }}</span>
         </div>
@@ -278,7 +278,7 @@ onUnmounted(() => {
           :border="false"
           aria-label="界面语言"
           wrapper-class="w-auto"
-          button-class="h-[24px] bg-transparent px-1.5 text-[12px] !text-[#8f8f8f] !hover:text-[#e5e5e5]"
+          button-class="h-[24px] bg-transparent px-1.5 text-[12px] !text-ink-muted !hover:text-ink-primary"
           menu-class="text-[12px]"
         />
       </div>
